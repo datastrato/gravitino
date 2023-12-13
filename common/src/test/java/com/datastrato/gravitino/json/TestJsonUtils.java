@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 package com.datastrato.gravitino.json;
@@ -146,5 +146,18 @@ public class TestJsonUtils {
             + "    ]\n"
             + "}";
     Assertions.assertEquals(objectMapper.readTree(expected), objectMapper.readTree(jsonValue));
+  }
+
+  @Test
+  void testGetLong() throws Exception {
+    String jsonException = "{\"property\": \"value\"}";
+    JsonNode nodeException = objectMapper.readTree(jsonException);
+
+    Assertions.assertThrows(
+        IllegalArgumentException.class, () -> JsonUtils.getLong("property", nodeException));
+    String jsonNormal = "{\"property\": 1}";
+    JsonNode nodeNormal = objectMapper.readTree(jsonNormal);
+    Long result = JsonUtils.getLong("property", nodeNormal);
+    assertEquals(1L, result);
   }
 }

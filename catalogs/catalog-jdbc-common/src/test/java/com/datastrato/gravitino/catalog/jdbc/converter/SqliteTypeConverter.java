@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 package com.datastrato.gravitino.catalog.jdbc.converter;
@@ -11,7 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 
-public class SqliteTypeConverter extends JdbcTypeConverter {
+public class SqliteTypeConverter extends JdbcTypeConverter<String, String> {
 
   protected static final Map<Type, String> GRAVITINO_TO_SQLITE_MAPPING = new HashMap<>();
 

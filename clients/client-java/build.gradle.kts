@@ -1,12 +1,11 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 plugins {
   `maven-publish`
   id("java")
   id("idea")
-  id("com.diffplug.spotless")
 }
 
 dependencies {
@@ -36,4 +35,21 @@ dependencies {
   testImplementation(libs.mockito.core)
   testImplementation(libs.mockserver.netty)
   testImplementation(libs.mockserver.client.java)
+  testImplementation(libs.bundles.jwt)
+}
+
+tasks.build {
+  dependsOn("javadoc")
+}
+
+tasks.javadoc {
+  dependsOn(":api:javadoc", ":common:javadoc")
+  source =
+    sourceSets["main"].allJava +
+    project(":api").sourceSets["main"].allJava +
+    project(":common").sourceSets["main"].allJava
+
+  classpath = configurations["compileClasspath"] +
+    project(":api").configurations["runtimeClasspath"] +
+    project(":common").configurations["runtimeClasspath"]
 }

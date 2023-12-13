@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 
@@ -21,7 +21,7 @@ public class KvRangeScan {
   private boolean endInclusive;
 
   private int limit;
-  private BiPredicate predicate;
+  private BiPredicate<byte[], byte[]> predicate;
 
   /**
    * Constructs a KvRangeScan instance with the specified parameters.

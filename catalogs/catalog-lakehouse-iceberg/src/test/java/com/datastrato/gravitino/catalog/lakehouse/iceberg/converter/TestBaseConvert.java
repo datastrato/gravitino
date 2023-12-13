@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 package com.datastrato.gravitino.catalog.lakehouse.iceberg.converter;
@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import org.apache.commons.lang3.RandomUtils;
+import org.apache.commons.lang.math.RandomUtils;
 import org.apache.iceberg.types.Types;
 
 /** Provide some basic usage methods and test classes for basic fields. */
@@ -52,9 +52,9 @@ public class TestBaseConvert {
     GRAVITINO_TYPE.put("TIME", com.datastrato.gravitino.rel.types.Types.TimeType.get());
     GRAVITINO_TYPE.put("UUID", com.datastrato.gravitino.rel.types.Types.UUIDType.get());
     // Types not supported by iceberg
-    //        ICEBERG_TYPE.put("INTERVAL_DAY", GRAVITINO_TYPE.put("I16",
+    //    GRAVITINO_TYPE.put("INTERVAL_DAY",
     // com.datastrato.gravitino.rel.types.Types.IntervalDayType.get());
-    //        ICEBERG_TYPE.put("INTERVAL_YEAR", GRAVITINO_TYPE.put("I16",
+    //    GRAVITINO_TYPE.put("INTERVAL_YEAR",
     // com.datastrato.gravitino.rel.types.Types.IntervalYearType.get());
 
     ICEBERG_TYPE.put("BOOLEAN", org.apache.iceberg.types.Types.BooleanType.get());
@@ -123,7 +123,7 @@ public class TestBaseConvert {
   private static Type getRandomGravitinoType() {
     Collection<Type> values = GRAVITINO_TYPE.values();
     return values.stream()
-        .skip(RandomUtils.nextInt(0, values.size()))
+        .skip(RandomUtils.nextInt(values.size()))
         .findFirst()
         .orElseThrow(() -> new RuntimeException("No type found"));
   }
@@ -131,7 +131,7 @@ public class TestBaseConvert {
   private static org.apache.iceberg.types.Type getRandomIcebergType() {
     Collection<org.apache.iceberg.types.Type> values = ICEBERG_TYPE.values();
     return values.stream()
-        .skip(RandomUtils.nextInt(0, values.size()))
+        .skip(RandomUtils.nextInt(values.size()))
         .findFirst()
         .orElseThrow(() -> new RuntimeException("No type found"));
   }

@@ -1,22 +1,24 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 
 module.exports = {
-  arrowParens: 'avoid',
+  printWidth: 120,
+  tabWidth: 2,
+  useTabs: false,
+  semi: false,
+  singleQuote: true,
+  quoteProps: 'as-needed',
+  jsxSingleQuote: true,
+  trailingComma: 'es5',
   bracketSpacing: true,
+  arrowParens: 'avoid',
+  endOfLine: 'lf',
+  requirePragma: false,
   htmlWhitespaceSensitivity: 'css',
   insertPragma: false,
   bracketSameLine: false,
-  jsxSingleQuote: true,
-  printWidth: 120,
   proseWrap: 'preserve',
-  quoteProps: 'as-needed',
-  requirePragma: false,
-  semi: false,
-  singleQuote: true,
-  tabWidth: 2,
-  trailingComma: 'none',
-  useTabs: false
+  trailingComma: 'none'
 }

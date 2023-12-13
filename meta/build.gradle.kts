@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 
@@ -8,7 +8,6 @@ plugins {
   id("java")
   id("idea")
   alias(libs.plugins.protobuf)
-  alias(libs.plugins.spotless)
 }
 
 dependencies {
@@ -23,5 +22,5 @@ sourceSets {
 }
 
 protobuf {
-  protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protoc.get()}"}
+  protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protoc.get()}" }
 }

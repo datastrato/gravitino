@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 
@@ -13,5 +13,5 @@ import java.io.IOException;
  */
 @FunctionalInterface
 public interface BiPredicate<T1, T2> {
-  boolean test(T1 v1, T2 value) throws IOException;
+  boolean test(T1 v1, T2 v2) throws IOException;
 }

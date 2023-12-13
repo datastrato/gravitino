@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 
@@ -24,6 +24,7 @@ dependencies {
   implementation(libs.bundles.jetty)
   implementation(libs.bundles.jwt)
   implementation(libs.bundles.metrics)
+  implementation(libs.prometheus.servlet)
 
   testImplementation(libs.junit.jupiter.api)
   testImplementation(libs.junit.jupiter.params)

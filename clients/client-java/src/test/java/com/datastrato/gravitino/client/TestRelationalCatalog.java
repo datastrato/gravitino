@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Datastrato.
+ * Copyright 2023 Datastrato Pvt Ltd.
  * This software is licensed under the Apache License version 2.
  */
 package com.datastrato.gravitino.client;
@@ -695,7 +695,7 @@ public class TestRelationalCatalog extends TestBase {
     ColumnDTO[] columns =
         new ColumnDTO[] {
           createMockColumn("col1", Types.ByteType.get(), "comment1"),
-          createMockColumn("col2", Types.StringType.get(), "comment2")
+          createMockColumn("col2", Types.StringType.get(), "comment2", false)
         };
 
     DistributionDTO distributionDTO = createMockDistributionDTO("col2", 10);
@@ -716,7 +716,8 @@ public class TestRelationalCatalog extends TestBase {
             new String[] {"col2"},
             Types.StringType.get(),
             "comment2",
-            TableChange.ColumnPosition.after("col1"));
+            TableChange.ColumnPosition.after("col1"),
+            false);
 
     testAlterTable(tableId, req, expectedTable);
   }
@@ -793,6 +794,29 @@ public class TestRelationalCatalog extends TestBase {
     TableUpdateRequest.UpdateTableColumnTypeRequest req =
         new TableUpdateRequest.UpdateTableColumnTypeRequest(
             new String[] {"col1"}, Types.StringType.get());
+
+    testAlterTable(tableId, req, expectedTable);
+  }
+
+  @Test
+  public void testUpdateTableColumnNullability() throws JsonProcessingException {
+    NameIdentifier tableId = NameIdentifier.of(metalakeName, catalogName, "schema1", "table1");
+    ColumnDTO[] columns =
+        new ColumnDTO[] {createMockColumn("col1", Types.StringType.get(), "comment1")};
+
+    DistributionDTO distributionDTO = createMockDistributionDTO("col1", 10);
+    SortOrderDTO[] sortOrderDTOs = createMockSortOrderDTO("col1", DESCENDING);
+    TableDTO expectedTable =
+        createMockTable(
+            "table1",
+            columns,
+            "comment",
+            Collections.emptyMap(),
+            EMPTY_PARTITIONING,
+            distributionDTO,
+            sortOrderDTOs);
+    TableUpdateRequest.UpdateTableColumnNullabilityRequest req =
+        new TableUpdateRequest.UpdateTableColumnNullabilityRequest(new String[] {"col1"}, true);
 
     testAlterTable(tableId, req, expectedTable);
   }
@@ -890,6 +914,29 @@ public class TestRelationalCatalog extends TestBase {
     Assertions.assertFalse(catalog.asTableCatalog().dropTable(tableId));
   }
 
+  @Test
+  public void testPurgeTable() throws JsonProcessingException {
+    NameIdentifier tableId = NameIdentifier.of(metalakeName, catalogName, "schema1", "table1");
+    String tablePath =
+        withSlash(
+            RelationalCatalog.formatTableRequestPath(tableId.namespace()) + "/" + tableId.name());
+    DropResponse resp = new DropResponse(true);
+    buildMockResource(Method.DELETE, tablePath, null, resp, SC_OK);
+
+    Assertions.assertTrue(catalog.asTableCatalog().purgeTable(tableId));
+
+    // return false
+    resp = new DropResponse(false);
+    buildMockResource(Method.DELETE, tablePath, null, resp, SC_OK);
+    Assertions.assertFalse(catalog.asTableCatalog().purgeTable(tableId));
+
+    // Test with exception
+    ErrorResponse errorResp = ErrorResponse.internalError("internal error");
+    buildMockResource(Method.DELETE, tablePath, null, errorResp, SC_INTERNAL_SERVER_ERROR);
+
+    Assertions.assertFalse(catalog.asTableCatalog().purgeTable(tableId));
+  }
+
   private void testAlterTable(NameIdentifier ident, TableUpdateRequest req, TableDTO updatedTable)
       throws JsonProcessingException {
     String tablePath =
@@ -910,6 +957,8 @@ public class TestRelationalCatalog extends TestBase {
           updatedTable.columns()[i].dataType(), alteredTable.columns()[i].dataType());
       Assertions.assertEquals(
           updatedTable.columns()[i].comment(), alteredTable.columns()[i].comment());
+      Assertions.assertEquals(
+          updatedTable.columns()[i].nullable(), alteredTable.columns()[i].nullable());
     }
 
     Assertions.assertArrayEquals(updatedTable.partitioning(), alteredTable.partitioning());
@@ -947,12 +996,17 @@ public class TestRelationalCatalog extends TestBase {
   }
 
   private static ColumnDTO createMockColumn(String name, Type type, String comment) {
-    return new ColumnDTO.Builder<>().withName(name).withDataType(type).withComment(comment).build();
+    return createMockColumn(name, type, comment, true);
   }
 
-  private static TableDTO createMockTable(
-      String name, ColumnDTO[] columns, String comment, Map<String, String> properties) {
-    return createMockTable(name, columns, comment, properties, EMPTY_PARTITIONING, null, null);
+  private static ColumnDTO createMockColumn(
+      String name, Type type, String comment, boolean nullable) {
+    return new ColumnDTO.Builder<>()
+        .withName(name)
+        .withDataType(type)
+        .withComment(comment)
+        .withNullable(nullable)
+        .build();
   }
 
   private static TableDTO createMockTable(
