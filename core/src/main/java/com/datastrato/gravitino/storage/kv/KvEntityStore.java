@@ -6,11 +6,9 @@
 package com.datastrato.gravitino.storage.kv;
 
 import static com.datastrato.gravitino.Configs.ENTITY_KV_STORE;
-import static com.datastrato.gravitino.Entity.EntityType.CATALOG;
-import static com.datastrato.gravitino.Entity.EntityType.SCHEMA;
-import static com.datastrato.gravitino.Entity.EntityType.TABLE;
-import static com.datastrato.gravitino.storage.kv.BinaryEntityKeyEncoder.LOG;
 import static com.datastrato.gravitino.storage.kv.BinaryEntityKeyEncoder.NAMESPACE_SEPARATOR;
+import static com.datastrato.gravitino.storage.kv.KvNameMappingService.ID_PREFIX;
+import static com.datastrato.gravitino.storage.kv.KvNameMappingService.NAME_PREFIX;
 
 import com.datastrato.gravitino.Config;
 import com.datastrato.gravitino.Entity;
@@ -34,12 +32,10 @@ import com.datastrato.gravitino.utils.Executable;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -295,60 +291,6 @@ public class KvEntityStore implements EntityStore {
     return serDe.deserialize(value, e);
   }
 
-  /**
-   * Get key prefix of all sub-entities under a specific entities. For example, as a metalake will
-   * start with `ml_{metalake_id}`, sub-entities under this metalake will have the prefix
-   *
-   * <pre>
-   *   catalog: ca_{metalake_id}
-   *   schema:  sc_{metalake_id}
-   *   table:   ta_{metalake_id}
-   * </pre>
-   *
-   * Why the sub-entities under this metalake start with those prefixes, please see {@link
-   * KvEntityStore} java class doc.
-   *
-   * @param ident identifier of an entity
-   * @param type type of entity
-   * @return list of sub-entities prefix
-   * @throws IOException if error occurs
-   */
-  private List<byte[]> getSubEntitiesPrefix(NameIdentifier ident, EntityType type)
-      throws IOException {
-    List<byte[]> prefixes = Lists.newArrayList();
-    byte[] encode = entityKeyEncoder.encode(ident, type, true);
-    switch (type) {
-      case METALAKE:
-        prefixes.add(replacePrefixTypeInfo(encode, CATALOG.getShortName()));
-        prefixes.add(replacePrefixTypeInfo(encode, SCHEMA.getShortName()));
-        prefixes.add(replacePrefixTypeInfo(encode, TABLE.getShortName()));
-        break;
-      case CATALOG:
-        prefixes.add(replacePrefixTypeInfo(encode, SCHEMA.getShortName()));
-        prefixes.add(replacePrefixTypeInfo(encode, TABLE.getShortName()));
-        break;
-      case SCHEMA:
-        prefixes.add(replacePrefixTypeInfo(encode, TABLE.getShortName()));
-        break;
-      case TABLE:
-        break;
-      default:
-        LOG.warn("Currently unknown type: {}, please check it", type);
-    }
-    Collections.reverse(prefixes);
-    return prefixes;
-  }
-
-  private byte[] replacePrefixTypeInfo(byte[] encode, String subTypePrefix) {
-    byte[] result = new byte[encode.length];
-    System.arraycopy(encode, 0, result, 0, encode.length);
-    byte[] bytes = subTypePrefix.getBytes(StandardCharsets.UTF_8);
-    result[0] = bytes[0];
-    result[1] = bytes[1];
-
-    return result;
-  }
-
   @Override
   public boolean delete(NameIdentifier ident, EntityType entityType, boolean cascade)
       throws IOException {
@@ -359,22 +301,36 @@ public class KvEntityStore implements EntityStore {
                   if (!exists(ident, entityType)) {
                     return false;
                   }
+                  // Get the prefix of the name to id mapping for sub-entities of this one
+                  // According to KvNameMappingService, if the entity is
+                  // 'mataleke1.catalog1.schema1',
+                  // and the name to id mapping is as following:
+                  // metalake1   ---> 1
+                  // 1/catalog1  ---> 2
+                  // 1/2/schema1 ---> 3
+                  // Then the prefix of the name to id mapping for sub-entities of this one is
+                  // '1/2/3/'
+                  // identNameToIdKey in this example is '1/2/schema1'
+                  String identNameToIdKey = generateKeyForMapping(ident);
+                  // id in this example is 3, ids in this example is ['1', '2', 'schema1']
+                  long id = nameMappingService.getIdByName(identNameToIdKey);
+                  String[] ids = identNameToIdKey.split(NAMESPACE_SEPARATOR);
+                  String[] realIds = ArrayUtils.remove(ids, ids.length - 1);
+                  realIds = ArrayUtils.add(realIds, String.valueOf(id));
+                  String subEntitiesPrefix =
+                      String.join(NAMESPACE_SEPARATOR, realIds) + NAMESPACE_SEPARATOR;
 
-                  byte[] dataKey = entityKeyEncoder.encode(ident, entityType, true);
-                  List<byte[]> subEntityPrefix = getSubEntitiesPrefix(ident, entityType);
-                  if (subEntityPrefix.isEmpty()) {
-                    // has no sub-entities
-                    return transactionalKvBackend.delete(dataKey);
-                  }
-
-                  byte[] directChild = Iterables.getLast(subEntityPrefix);
-                  byte[] endKey = Bytes.increment(Bytes.wrap(directChild)).get();
+                  // Scan underlying data
+                  byte[] binarySubEntitiesPrefix =
+                      subEntitiesPrefix.getBytes(StandardCharsets.UTF_8);
+                  byte[] nextIdentNameToIdKey =
+                      Bytes.increment(Bytes.wrap(binarySubEntitiesPrefix)).get();
                   List<Pair<byte[], byte[]>> kvs =
                       transactionalKvBackend.scan(
                           new KvRangeScan.KvRangeScanBuilder()
-                              .start(directChild)
-                              .end(endKey)
-                              .startInclusive(true)
+                              .start(Bytes.concat(NAME_PREFIX, binarySubEntitiesPrefix))
+                              .end(Bytes.concat(NAME_PREFIX, nextIdentNameToIdKey))
+                              .startInclusive(false)
                               .endInclusive(false)
                               .limit(1)
                               .build());
@@ -391,16 +347,19 @@ public class KvEntityStore implements EntityStore {
                             ident, subEntities));
                   }
 
-                  for (byte[] prefix : subEntityPrefix) {
-                    transactionalKvBackend.deleteRange(
-                        new KvRangeScan.KvRangeScanBuilder()
-                            .start(prefix)
-                            .startInclusive(true)
-                            .end(Bytes.increment(Bytes.wrap(prefix)).get())
-                            .build());
-                  }
+                  // Remove data and id-name mapping, we will use GC to collect data of
+                  // sub-entities
+                  byte[] dataKey = entityKeyEncoder.encode(ident, entityType, true);
+                  transactionalKvBackend.delete(dataKey);
 
-                  return transactionalKvBackend.delete(dataKey);
+                  byte[] nameByte =
+                      Bytes.concat(NAME_PREFIX, identNameToIdKey.getBytes(StandardCharsets.UTF_8));
+                  byte[] idByte = transactionalKvBackend.get(nameByte);
+                  if (idByte == null) {
+                    return false;
+                  }
+                  transactionalKvBackend.delete(nameByte);
+                  return transactionalKvBackend.delete(Bytes.concat(ID_PREFIX, idByte));
                 }),
         reentrantReadWriteLock);
   }
