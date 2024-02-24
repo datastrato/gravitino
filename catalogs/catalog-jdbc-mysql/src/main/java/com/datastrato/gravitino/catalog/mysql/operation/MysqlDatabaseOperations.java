@@ -91,6 +91,19 @@ public class MysqlDatabaseOperations extends JdbcDatabaseOperations {
   }
 
   @Override
+  protected void validateDatabaseName(String databaseName) {
+    if (StringUtils.isEmpty(databaseName)) {
+      throw new IllegalArgumentException("Database name cannot be empty.");
+    }
+    if (databaseName.length() > 64) {
+      throw new IllegalArgumentException("Database name cannot be longer than 64 characters.");
+    }
+    if (!databaseName.matches("^[\\w\\p{L}$]*$")) {
+      throw new IllegalArgumentException("Invalid database name.");
+    }
+  }
+
+  @Override
   public JdbcSchema load(String databaseName) throws NoSuchSchemaException {
     try (final Connection connection = this.dataSource.getConnection()) {
       String query = "SELECT * FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?";

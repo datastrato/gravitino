@@ -91,4 +91,9 @@ public class SqliteDatabaseOperations extends JdbcDatabaseOperations {
   public String generateDropDatabaseSql(String databaseName, boolean cascade) {
     return null;
   }
+
+  @Override
+  protected void validateDatabaseName(String databaseName) {
+    // do nothing
+  }
 }

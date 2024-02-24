@@ -10,6 +10,7 @@ import com.datastrato.gravitino.utils.RandomNameUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -28,5 +29,25 @@ public class TestMysqlDatabaseOperations extends TestMysqlAbstractIT {
         sysMysqlDatabaseName -> Assertions.assertFalse(databases.contains(sysMysqlDatabaseName)));
     testBaseOperation(databaseName, properties, comment);
     testDropDatabase(databaseName);
+  }
+
+  @Test
+  public void testDropDatabaseWithSqlInjection() {
+    String databaseName = GravitinoITUtils.genRandomName("ct_db");
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection = databaseName + " UNION SELECT NOW()";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection);
+        });
+
+    // testDropDatabase should throw an exception with input that has more than 65 characters
+    String invalidInput = StringUtils.repeat("a", 65);
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(invalidInput);
+        });
   }
 }

@@ -126,6 +126,19 @@ public class PostgreSqlSchemaOperations extends JdbcDatabaseOperations {
   }
 
   @Override
+  protected void validateDatabaseName(String schema) {
+    if (StringUtils.isEmpty(schema)) {
+      throw new IllegalArgumentException("Schema name cannot be empty.");
+    }
+    if (schema.length() > 63) {
+      throw new IllegalArgumentException("Schema name cannot be longer than 63 characters.");
+    }
+    if (!schema.matches("^[_a-zA-Z\\p{L}][\\w\\p{L}$]*$")) {
+      throw new IllegalArgumentException("Invalid schema name.");
+    }
+  }
+
+  @Override
   protected Connection getConnection() throws SQLException {
     Connection connection = dataSource.getConnection();
     connection.setCatalog(database);

@@ -102,4 +102,33 @@ public class TestPostgreSqlSchemaOperations extends TestPostgreSqlAbstractIT {
     JdbcSchema load = postgreSqlSchemaOperations.load(schema_1);
     Assertions.assertEquals(schema_1, load.name());
   }
+
+  @Test
+  public void testDropDatabaseWithSqlInjection() {
+    String databaseName = GravitinoITUtils.genRandomName("ct_db");
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection = databaseName + " UNION SELECT NOW()";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection);
+        });
+
+    // testDropDatabase should throw an exception with input that has more than 64 characters
+    String invalidInput = StringUtils.repeat("a", 64);
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(invalidInput);
+        });
+
+    // testDropDatabase should throw an exception with schema name that starts with special
+    // character
+    String invalidInput2 = GravitinoITUtils.genRandomName("$test_db");
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(invalidInput2);
+        });
+  }
 }
