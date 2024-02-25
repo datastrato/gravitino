@@ -34,12 +34,30 @@ public class TestMysqlDatabaseOperations extends TestMysqlAbstractIT {
   @Test
   public void testDropDatabaseWithSqlInjection() {
     String databaseName = GravitinoITUtils.genRandomName("ct_db");
+
     // testDropDatabase should throw an exception with string that might contain SQL injection
-    String sqlInjection = databaseName + " UNION SELECT NOW()";
+    String sqlInjection = databaseName + "`; DROP TABLE important_table; -- ";
     Assertions.assertThrows(
         IllegalArgumentException.class,
         () -> {
           testDropDatabase(sqlInjection);
+        });
+
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection1 = databaseName + "`; SLEEP(10); -- ";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection1);
+        });
+
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection2 =
+        databaseName + "`; UPDATE Users SET password = 'newpassword' WHERE username = 'admin'; -- ";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection2);
         });
 
     // testDropDatabase should throw an exception with input that has more than 65 characters

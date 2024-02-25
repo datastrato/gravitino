@@ -98,6 +98,10 @@ public class MysqlDatabaseOperations extends JdbcDatabaseOperations {
     if (databaseName.length() > 64) {
       throw new IllegalArgumentException("Database name cannot be longer than 64 characters.");
     }
+    // Regex that matches any string that consists entirely of word characters, Unicode letters, or
+    // dollar signs
+    // \w matches [a-zA-Z0-9_]
+    // \p{L} matches any kind of letter from any language
     if (!databaseName.matches("^[\\w\\p{L}$]*$")) {
       throw new IllegalArgumentException("Invalid database name.");
     }
