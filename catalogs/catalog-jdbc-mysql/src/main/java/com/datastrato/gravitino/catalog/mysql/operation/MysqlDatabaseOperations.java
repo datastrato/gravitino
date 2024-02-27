@@ -92,7 +92,7 @@ public class MysqlDatabaseOperations extends JdbcDatabaseOperations {
 
   @Override
   protected void validateDatabaseName(String databaseName) {
-    if (StringUtils.isEmpty(databaseName)) {
+    if (StringUtils.isBlank(databaseName)) {
       throw new IllegalArgumentException("Database name cannot be empty.");
     }
     if (databaseName.length() > 64) {
@@ -103,7 +103,8 @@ public class MysqlDatabaseOperations extends JdbcDatabaseOperations {
     // \w matches [a-zA-Z0-9_]
     // \p{L} matches any kind of letter from any language
     if (!databaseName.matches("^[\\w\\p{L}$]*$")) {
-      throw new IllegalArgumentException("Invalid database name.");
+      throw new IllegalArgumentException(
+          String.format("Invalid database name '%s'.", databaseName));
     }
   }
 

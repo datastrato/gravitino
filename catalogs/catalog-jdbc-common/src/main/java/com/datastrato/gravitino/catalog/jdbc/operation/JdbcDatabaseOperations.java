@@ -51,8 +51,8 @@ public abstract class JdbcDatabaseOperations implements DatabaseOperation {
   @Override
   public void delete(String databaseName, boolean cascade) throws NoSuchSchemaException {
     LOG.info("Beginning to drop database {}", databaseName);
+    validateDatabaseName(databaseName);
     try (final Connection connection = getConnection()) {
-      validateDatabaseName(databaseName);
       JdbcConnectorUtils.executeUpdate(connection, generateDropDatabaseSql(databaseName, cascade));
       LOG.info("Finished dropping database {}", databaseName);
     } catch (final SQLException se) {

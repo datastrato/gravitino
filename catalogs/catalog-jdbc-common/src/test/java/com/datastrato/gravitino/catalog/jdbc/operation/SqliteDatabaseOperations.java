@@ -96,7 +96,7 @@ public class SqliteDatabaseOperations extends JdbcDatabaseOperations {
 
   @Override
   protected void validateDatabaseName(String databaseName) {
-    if (StringUtils.isEmpty(databaseName)) {
+    if (StringUtils.isBlank(databaseName)) {
       throw new IllegalArgumentException("Database name cannot be empty.");
     }
     // Regex that matches any string that maybe a filename with an optional extension
@@ -106,7 +106,8 @@ public class SqliteDatabaseOperations extends JdbcDatabaseOperations {
     // [^.\/\\]+ matches any filename string that does not contain '.', '/', or '\'
     // (\.[^.\/\\]+)? matches an optional extension
     if (!databaseName.matches("^[^.\\/\\\\]+(\\.[^.\\/\\\\]+)?$")) {
-      throw new IllegalArgumentException("Invalid database name.");
+      throw new IllegalArgumentException(
+          String.format("Invalid database name '%s'.", databaseName));
     }
   }
 }
