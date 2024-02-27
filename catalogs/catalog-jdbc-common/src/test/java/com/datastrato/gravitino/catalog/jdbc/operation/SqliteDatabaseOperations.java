@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 
 public class SqliteDatabaseOperations extends JdbcDatabaseOperations {
   private String dbPath;
@@ -78,6 +79,7 @@ public class SqliteDatabaseOperations extends JdbcDatabaseOperations {
   }
 
   public void delete(String databaseName) {
+    validateDatabaseName(databaseName);
     FileUtils.deleteQuietly(new File(dbPath + "/" + databaseName));
   }
 
@@ -94,6 +96,17 @@ public class SqliteDatabaseOperations extends JdbcDatabaseOperations {
 
   @Override
   protected void validateDatabaseName(String databaseName) {
-    // do nothing
+    if (StringUtils.isEmpty(databaseName)) {
+      throw new IllegalArgumentException("Database name cannot be empty.");
+    }
+    // Regex that matches any string that maybe a filename with an optional extension
+    // We adopt a blacklist approach that excludes filename or extension that contains '.', '/', or
+    // '\'
+    // in order to prevent path traversal attacks
+    // [^.\/\\]+ matches any filename string that does not contain '.', '/', or '\'
+    // (\.[^.\/\\]+)? matches an optional extension
+    if (!databaseName.matches("^[^.\\/\\\\]+(\\.[^.\\/\\\\]+)?$")) {
+      throw new IllegalArgumentException("Invalid database name.");
+    }
   }
 }
