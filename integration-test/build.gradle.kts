@@ -134,6 +134,7 @@ dependencies {
     exclude("jakarta.annotation")
   }
   testImplementation(libs.trino.jdbc)
+  testImplementation(libs.ranger.intg)
   testRuntimeOnly(libs.junit.jupiter.engine)
 }
 
@@ -320,6 +321,7 @@ tasks.test {
       // Gravitino CI Docker image
       environment("GRAVITINO_CI_HIVE_DOCKER_IMAGE", "datastrato/gravitino-ci-hive:0.1.8")
       environment("GRAVITINO_CI_TRINO_DOCKER_IMAGE", "datastrato/gravitino-ci-trino:0.1.5")
+      environment("GRAVITINO_CI_RANGER_DOCKER_IMAGE", "datastrato/gravitino-ci-ranger:0.1.0")
 
       // Change poll image pause time from 30s to 60s
       environment("TESTCONTAINERS_PULL_PAUSE_TIMEOUT", "60")
