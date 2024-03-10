@@ -106,9 +106,8 @@ public class RangerContainer extends BaseContainer {
       this.image = DEFAULT_IMAGE;
       this.hostName = HOST_NAME;
       this.exposePorts = ImmutableSet.of(RANGER_PORT);
-      this.envVars = ImmutableMap.<String, String>builder()
-              .put("RANGER_PASSWORD", password)
-              .build();
+      this.envVars =
+          ImmutableMap.<String, String>builder().put("RANGER_PASSWORD", password).build();
     }
 
     @Override
