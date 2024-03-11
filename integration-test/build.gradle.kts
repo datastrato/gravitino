@@ -134,7 +134,16 @@ dependencies {
     exclude("jakarta.annotation")
   }
   testImplementation(libs.trino.jdbc)
-  testImplementation(libs.ranger.intg)
+  testImplementation(libs.ranger.intg) {
+    exclude("org.apache.hadoop", "hadoop-common")
+    exclude("org.apache.hive", "hive-storage-api")
+    exclude("org.apache.lucene")
+    exclude("org.apache.solr")
+    exclude("org.apache.kafka")
+    exclude("org.elasticsearch")
+    exclude("org.elasticsearch.client")
+    exclude("org.elasticsearch.plugin")
+  }
   testRuntimeOnly(libs.junit.jupiter.engine)
 }
 
