@@ -35,7 +35,7 @@ public class ContainerSuite implements Closeable {
   private static HiveContainer hiveContainer;
   private static TrinoContainer trinoContainer;
   private static TrinoITContainers trinoITContainers;
-
+  private static RangerContainer rangerContainer;
   protected static final CloseableGroup closer = CloseableGroup.create();
 
   private ContainerSuite() {
@@ -83,6 +83,20 @@ public class ContainerSuite implements Closeable {
             .withNetwork(network);
     hiveContainer = closer.register(hiveBuilder.build());
     hiveContainer.start();
+  }
+
+  public void startRangerContainer() {
+    if (rangerContainer != null) {
+      return;
+    }
+    // Start Ranger container
+    RangerContainer.Builder rangerBuilder = RangerContainer.builder().withNetwork(network);
+    rangerContainer = closer.register(rangerBuilder.build());
+    rangerContainer.start();
+  }
+
+  public RangerContainer getRangerContainer() {
+    return rangerContainer;
   }
 
   public void startTrinoContainer(
