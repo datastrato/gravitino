@@ -105,7 +105,7 @@ public class TestPostgreSqlSchemaOperations extends TestPostgreSqlAbstractIT {
 
   @Test
   public void testDropDatabaseWithSqlInjection() {
-    String databaseName = GravitinoITUtils.genRandomName("ct_db");
+    String databaseName = RandomNameUtils.genRandomName("ct_db");
 
     // testDropDatabase should throw an exception with string that might contain SQL injection
     String sqlInjection = databaseName + "; DROP TABLE important_table; -- ";
@@ -142,7 +142,7 @@ public class TestPostgreSqlSchemaOperations extends TestPostgreSqlAbstractIT {
 
     // testDropDatabase should throw an exception with schema name that starts with special
     // character
-    String invalidInput2 = GravitinoITUtils.genRandomName("$test_db");
+    String invalidInput2 = RandomNameUtils.genRandomName("$test_db");
     Assertions.assertThrows(
         IllegalArgumentException.class,
         () -> {

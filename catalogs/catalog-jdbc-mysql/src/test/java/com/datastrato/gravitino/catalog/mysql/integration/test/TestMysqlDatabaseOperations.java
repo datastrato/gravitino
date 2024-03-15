@@ -33,7 +33,7 @@ public class TestMysqlDatabaseOperations extends TestMysqlAbstractIT {
 
   @Test
   public void testDropDatabaseWithSqlInjection() {
-    String databaseName = GravitinoITUtils.genRandomName("ct_db");
+    String databaseName = RandomNameUtils.genRandomName("ct_db");
 
     // testDropDatabase should throw an exception with string that might contain SQL injection
     String sqlInjection = databaseName + "`; DROP TABLE important_table; -- ";
