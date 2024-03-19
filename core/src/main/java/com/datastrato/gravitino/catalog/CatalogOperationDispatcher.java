@@ -52,6 +52,7 @@ import com.datastrato.gravitino.storage.IdGenerator;
 import com.datastrato.gravitino.utils.PrincipalUtils;
 import com.datastrato.gravitino.utils.ThrowableFunction;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import java.time.Instant;
 import java.util.Arrays;
@@ -446,12 +447,19 @@ public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog,
     NameIdentifier catalogIdent = getCatalogIdentifier(ident);
     doWithCatalog(
         catalogIdent,
-        c ->
-            c.doWithPropertiesMeta(
-                p -> {
-                  validatePropertyForCreate(p.tablePropertiesMetadata(), properties);
-                  return null;
-                }),
+        c -> {
+          c.doWithPropertiesMeta(
+              p -> {
+                validatePropertyForCreate(p.tablePropertiesMetadata(), properties);
+                return null;
+              });
+          c.doWithCapabilities(
+              caps -> {
+                caps.columnNotNull().apply(columns);
+                return null;
+              });
+          return null;
+        },
         IllegalArgumentException.class);
     long uid = idGenerator.nextId();
     // Add StringIdentifier to the properties, the specific catalog will handle this
@@ -801,15 +809,47 @@ public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog,
       T... changes) {
     doWithCatalog(
         getCatalogIdentifier(ident),
-        c ->
-            c.doWithPropertiesMeta(
-                p -> {
-                  Map<String, String> upserts = getPropertiesForSet(changes);
-                  Map<String, String> deletes = getPropertiesForDelete(changes);
-                  validatePropertyForAlter(provider.apply(p), upserts, deletes);
-                  return null;
-                }),
+        c -> {
+          c.doWithPropertiesMeta(
+              p -> {
+                Map<String, String> upserts = getPropertiesForSet(changes);
+                Map<String, String> deletes = getPropertiesForDelete(changes);
+                validatePropertyForAlter(provider.apply(p), upserts, deletes);
+                return null;
+              });
+          c.doWithCapabilities(
+              caps -> {
+                caps.columnNotNull().apply(getColumnWithNullable(changes));
+                return null;
+              });
+          return null;
+        },
         IllegalArgumentException.class);
+  }
+
+  private <T> Column[] getColumnWithNullable(T... t) {
+    List<Column> columns = Lists.newArrayList();
+    for (T item : t) {
+      if (item instanceof TableChange.AddColumn) {
+        TableChange.AddColumn addColumn = (TableChange.AddColumn) item;
+        String filedName = String.join(".", addColumn.fieldName());
+        columns.add(
+            Column.of(
+                filedName,
+                addColumn.getDataType(),
+                addColumn.getComment(),
+                addColumn.isNullable(),
+                addColumn.isAutoIncrement(),
+                null));
+      } else if (item instanceof TableChange.UpdateColumnNullability) {
+        TableChange.UpdateColumnNullability updateColumnNullability =
+            (TableChange.UpdateColumnNullability) item;
+        String filedName = String.join(".", updateColumnNullability.fieldName());
+        columns.add(
+            Column.of(filedName, null, null, updateColumnNullability.nullable(), false, null));
+      }
+    }
+    return columns.toArray(new Column[0]);
   }
 
   private <T> Map<String, String> getPropertiesForSet(T... t) {
