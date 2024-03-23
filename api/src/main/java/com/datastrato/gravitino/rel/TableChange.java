@@ -1246,21 +1246,22 @@ public interface TableChange {
     }
 
     /**
-     * Retrieves the field name of the column whose position is being updated.
+     * Retrieves the field name of the column whose default value is being updated.
      *
      * @return An array of strings representing the field name.
      */
-    public String[] getFieldName() {
+    @Override
+    public String[] fieldName() {
       return fieldName;
     }
 
     /**
-     * Retrieves the new position for the column.
+     * Retrieves the new default value for the column.
      *
      * @return The new default value of the column.
      */
     public String newDefaultValue() {
-      return this.newDefaultValue;
+      return newDefaultValue;
     }
 
     /**
@@ -1290,11 +1291,6 @@ public interface TableChange {
       int result = Objects.hash(newDefaultValue);
       result = 31 * result + Arrays.hashCode(fieldName);
       return result;
-    }
-
-    @Override
-    public String[] fieldName() {
-      return fieldName;
     }
   }
 
