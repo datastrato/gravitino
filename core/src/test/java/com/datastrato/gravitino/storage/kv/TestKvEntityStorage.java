@@ -31,10 +31,13 @@ import com.datastrato.gravitino.meta.AuditInfo;
 import com.datastrato.gravitino.meta.BaseMetalake;
 import com.datastrato.gravitino.meta.CatalogEntity;
 import com.datastrato.gravitino.meta.FilesetEntity;
+import com.datastrato.gravitino.meta.MetalakeGroup;
+import com.datastrato.gravitino.meta.MetalakeUser;
 import com.datastrato.gravitino.meta.SchemaEntity;
 import com.datastrato.gravitino.meta.SchemaVersion;
 import com.datastrato.gravitino.meta.TableEntity;
 import com.datastrato.gravitino.storage.StorageLayoutVersion;
+import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.File;
 import java.io.IOException;
@@ -90,6 +93,15 @@ public class TestKvEntityStorage {
         .build();
   }
 
+  public static MetalakeUser createUser(String metalake, String name, AuditInfo auditInfo) {
+    return MetalakeUser.builder()
+        .withId(1L)
+        .withMetalake(metalake)
+        .withName(name)
+        .withAuditInfo(auditInfo)
+        .build();
+  }
+
   public static SchemaEntity createSchemaEntity(
       Namespace namespace, String name, AuditInfo auditInfo) {
     return SchemaEntity.builder()
@@ -118,6 +130,16 @@ public class TestKvEntityStorage {
         .withNamespace(namespace)
         .withFilesetType(Fileset.Type.MANAGED)
         .withStorageLocation("/tmp")
+        .withAuditInfo(auditInfo)
+        .build();
+  }
+
+  public static MetalakeGroup createGroup(String metalake, String name, AuditInfo auditInfo) {
+    return MetalakeGroup.builder()
+        .withId(1L)
+        .withName(name)
+        .withUsers(Lists.newArrayList("user"))
+        .withMetalake(metalake)
         .withAuditInfo(auditInfo)
         .build();
   }
@@ -606,6 +628,43 @@ public class TestKvEntityStorage {
                 TableEntity.class,
                 EntityType.TABLE,
                 (e) -> e));
+  }
+
+  @Test
+  public void testAccessControlEntityDelete() throws IOException {
+    Config config = Mockito.mock(Config.class);
+    Mockito.when(config.get(ENTITY_STORE)).thenReturn("kv");
+    Mockito.when(config.get(ENTITY_KV_STORE)).thenReturn(DEFAULT_ENTITY_KV_STORE);
+    Mockito.when(config.get(Configs.ENTITY_SERDE)).thenReturn("proto");
+    Mockito.when(config.get(ENTRY_KV_ROCKSDB_BACKEND_PATH)).thenReturn("/tmp/gravitino");
+    Mockito.when(config.get(STORE_TRANSACTION_MAX_SKEW_TIME)).thenReturn(1000L);
+    Mockito.when(config.get(KV_DELETE_AFTER_TIME)).thenReturn(20 * 60 * 1000L);
+
+    FileUtils.deleteDirectory(FileUtils.getFile("/tmp/gravitino"));
+
+    AuditInfo auditInfo =
+        AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build();
+
+    try (EntityStore store = EntityStoreFactory.createEntityStore(config)) {
+      store.initialize(config);
+      Assertions.assertTrue(store instanceof KvEntityStore);
+      store.setSerDe(EntitySerDeFactory.createEntitySerDe(config.get(Configs.ENTITY_SERDE)));
+
+      BaseMetalake metalake = createBaseMakeLake("metalake", auditInfo);
+      store.put(metalake);
+      MetalakeUser oneUser = createUser("metalake", "oneUser", auditInfo);
+      store.put(oneUser);
+      MetalakeUser anotherUser = createUser("metalake", "anotherUser", auditInfo);
+      store.put(anotherUser);
+      MetalakeGroup oneGroup = createGroup("metalake", "group", auditInfo);
+      store.put(oneGroup);
+      Assertions.assertTrue(store.exists(oneUser.nameIdentifier(), EntityType.USER));
+      Assertions.assertTrue(store.exists(anotherUser.nameIdentifier(), EntityType.USER));
+      Assertions.assertTrue(store.exists(oneGroup.nameIdentifier(), EntityType.GROUP));
+      store.delete(metalake.nameIdentifier(), EntityType.METALAKE);
+      Assertions.assertFalse(store.exists(oneUser.nameIdentifier(), EntityType.USER));
+      Assertions.assertFalse(store.exists(anotherUser.nameIdentifier(), EntityType.USER));
+    }
   }
 
   @Test

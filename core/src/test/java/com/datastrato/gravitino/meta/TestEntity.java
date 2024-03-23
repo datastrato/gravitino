@@ -8,7 +8,9 @@ import com.datastrato.gravitino.Catalog;
 import com.datastrato.gravitino.Field;
 import com.datastrato.gravitino.file.Fileset;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -46,6 +48,15 @@ public class TestEntity {
   // Topic test data
   private final Long topicId = 1L;
   private final String topicName = "testTopic";
+
+  // User test data
+  private final Long userId = 1L;
+  private final String userName = "testUser";
+
+  // Group test data
+  private final Long groupId = 1L;
+  private final String groupName = "testGroup";
+  private final List<String> groupUsers = Lists.newArrayList("user");
 
   @Test
   public void testMetalake() {
@@ -199,5 +210,53 @@ public class TestEntity {
         TopicEntity.builder().withId(topicId).withName(topicName).withAuditInfo(auditInfo).build();
     Assertions.assertNull(testTopic1.comment());
     Assertions.assertNull(testTopic1.properties());
+  }
+
+  @Test
+  public void testUser() {
+    MetalakeUser testMetalakeUser =
+        MetalakeUser.builder()
+            .withId(userId)
+            .withName(userName)
+            .withAuditInfo(auditInfo)
+            .withProperties(map)
+            .build();
+
+    Map<Field, Object> fields = testMetalakeUser.fields();
+    Assertions.assertEquals(userId, fields.get(MetalakeUser.ID));
+    Assertions.assertEquals(userName, fields.get(MetalakeUser.NAME));
+    Assertions.assertEquals(auditInfo, fields.get(MetalakeUser.AUDIT_INFO));
+    Assertions.assertEquals(map, fields.get(MetalakeUser.PROPERTIES));
+
+    MetalakeUser testMetalakeUserWithoutFields =
+        MetalakeUser.builder().withId(userId).withName(userName).withAuditInfo(auditInfo).build();
+    Assertions.assertNull(testMetalakeUserWithoutFields.properties());
+  }
+
+  @Test
+  public void testGroup() {
+    MetalakeGroup group =
+        MetalakeGroup.builder()
+            .withId(groupId)
+            .withName(groupName)
+            .withAuditInfo(auditInfo)
+            .withProperties(map)
+            .withUsers(groupUsers)
+            .build();
+    Map<Field, Object> fields = group.fields();
+    Assertions.assertEquals(groupId, fields.get(MetalakeGroup.ID));
+    Assertions.assertEquals(groupName, fields.get(MetalakeGroup.NAME));
+    Assertions.assertEquals(auditInfo, fields.get(MetalakeGroup.AUDIT_INFO));
+    Assertions.assertEquals(map, fields.get(MetalakeGroup.PROPERTIES));
+    Assertions.assertEquals(groupUsers, fields.get(MetalakeGroup.USERS));
+
+    MetalakeGroup groupWithoutFields =
+        MetalakeGroup.builder()
+            .withId(userId)
+            .withName(userName)
+            .withUsers(groupUsers)
+            .withAuditInfo(auditInfo)
+            .build();
+    Assertions.assertNull(groupWithoutFields.properties());
   }
 }

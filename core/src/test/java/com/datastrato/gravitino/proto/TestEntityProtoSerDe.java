@@ -6,10 +6,14 @@ package com.datastrato.gravitino.proto;
 
 import com.datastrato.gravitino.EntitySerDe;
 import com.datastrato.gravitino.EntitySerDeFactory;
+import com.datastrato.gravitino.meta.MetalakeGroup;
+import com.datastrato.gravitino.meta.MetalakeUser;
 import com.datastrato.gravitino.meta.SchemaVersion;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -274,5 +278,56 @@ public class TestEntityProtoSerDe {
     Assertions.assertEquals(topicEntity1, topicEntityFromBytes1);
     Assertions.assertNull(topicEntityFromBytes1.comment());
     Assertions.assertNull(topicEntityFromBytes1.properties());
+
+    // Test UserEntity
+    Long userId = 1L;
+    String userName = "user";
+    MetalakeUser metalakeUser =
+        MetalakeUser.builder()
+            .withId(userId)
+            .withName(userName)
+            .withAuditInfo(auditInfo)
+            .withProperties(props)
+            .build();
+    byte[] userBytes = protoEntitySerDe.serialize(metalakeUser);
+    MetalakeUser metalakeUserFromBytes =
+        protoEntitySerDe.deserialize(userBytes, MetalakeUser.class);
+    Assertions.assertEquals(metalakeUser, metalakeUserFromBytes);
+
+    MetalakeUser metalakeUserWithoutFields =
+        MetalakeUser.builder().withId(userId).withName(userName).withAuditInfo(auditInfo).build();
+    userBytes = protoEntitySerDe.serialize(metalakeUserWithoutFields);
+    metalakeUserFromBytes = protoEntitySerDe.deserialize(userBytes, MetalakeUser.class);
+    Assertions.assertEquals(metalakeUserWithoutFields, metalakeUserFromBytes);
+    Assertions.assertNull(metalakeUserFromBytes.properties());
+
+    // Test GroupEntity
+    Long groupId = 1L;
+    String groupName = "group";
+    List<String> users = Lists.newArrayList("user");
+
+    MetalakeGroup group =
+        MetalakeGroup.builder()
+            .withId(groupId)
+            .withName(groupName)
+            .withAuditInfo(auditInfo)
+            .withProperties(props)
+            .withUsers(users)
+            .build();
+    byte[] groupBytes = protoEntitySerDe.serialize(group);
+    MetalakeGroup groupFromBytes = protoEntitySerDe.deserialize(groupBytes, MetalakeGroup.class);
+    Assertions.assertEquals(group, groupFromBytes);
+
+    MetalakeGroup groupWithoutFields =
+        MetalakeGroup.builder()
+            .withId(groupId)
+            .withUsers(users)
+            .withName(groupName)
+            .withAuditInfo(auditInfo)
+            .build();
+    groupBytes = protoEntitySerDe.serialize(groupWithoutFields);
+    groupFromBytes = protoEntitySerDe.deserialize(groupBytes, MetalakeGroup.class);
+    Assertions.assertEquals(groupWithoutFields, groupFromBytes);
+    Assertions.assertNull(groupFromBytes.properties());
   }
 }

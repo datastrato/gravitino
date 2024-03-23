@@ -13,12 +13,15 @@ import com.datastrato.gravitino.Catalog;
 import com.datastrato.gravitino.NameIdentifier;
 import com.datastrato.gravitino.dto.AuditDTO;
 import com.datastrato.gravitino.dto.CatalogDTO;
+import com.datastrato.gravitino.dto.GroupDTO;
 import com.datastrato.gravitino.dto.MetalakeDTO;
+import com.datastrato.gravitino.dto.UserDTO;
 import com.datastrato.gravitino.dto.rel.ColumnDTO;
 import com.datastrato.gravitino.dto.rel.SchemaDTO;
 import com.datastrato.gravitino.dto.rel.TableDTO;
 import com.datastrato.gravitino.dto.rel.partitioning.Partitioning;
 import com.datastrato.gravitino.rel.types.Types;
+import com.google.common.collect.Lists;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
@@ -222,5 +225,40 @@ public class TestResponses {
   void testOAuthErrorException() throws IllegalArgumentException {
     OAuth2ErrorResponse response = new OAuth2ErrorResponse();
     assertThrows(IllegalArgumentException.class, () -> response.validate());
+  }
+
+  @Test
+  void testUserResponse() throws IllegalArgumentException {
+    AuditDTO audit =
+        AuditDTO.builder().withCreator("creator").withCreateTime(Instant.now()).build();
+    UserDTO user = UserDTO.builder().withName("user1").withAudit(audit).build();
+    UserResponse response = new UserResponse(user);
+    response.validate(); // No exception thrown
+  }
+
+  @Test
+  void testUserResponseException() throws IllegalArgumentException {
+    UserResponse user = new UserResponse();
+    assertThrows(IllegalArgumentException.class, () -> user.validate());
+  }
+
+  @Test
+  void testGroupResponse() throws IllegalArgumentException {
+    AuditDTO audit =
+        AuditDTO.builder().withCreator("creator").withCreateTime(Instant.now()).build();
+    GroupDTO group =
+        GroupDTO.builder()
+            .withName("group")
+            .withUsers(Lists.newArrayList("user"))
+            .withAudit(audit)
+            .build();
+    GroupResponse response = new GroupResponse(group);
+    response.validate(); // No exception thrown
+  }
+
+  @Test
+  void testGroupResponseException() throws IllegalArgumentException {
+    GroupResponse group = new GroupResponse();
+    assertThrows(IllegalArgumentException.class, () -> group.validate());
   }
 }
