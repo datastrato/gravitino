@@ -6,10 +6,8 @@
 package com.datastrato.gravitino.flink.connector.store;
 
 import com.datastrato.gravitino.Catalog;
-import com.datastrato.gravitino.flink.connector.GravitinoCatalogFactoryOptions;
 import com.datastrato.gravitino.flink.connector.catalog.GravitinoCatalogManager;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.catalog.AbstractCatalogStore;
@@ -25,17 +23,17 @@ public class GravitinoCatalogStore extends AbstractCatalogStore {
   }
 
   @Override
-  public void storeCatalog(String catalogName, CatalogDescriptor descriptor) throws CatalogException {
-    String provider = descriptor.getConfiguration().getString(GravitinoCatalogStoreFactoryOptions.PROVIDER);
+  public void storeCatalog(String catalogName, CatalogDescriptor descriptor)
+      throws CatalogException {
+    String provider =
+        descriptor.getConfiguration().getString(GravitinoCatalogStoreFactoryOptions.PROVIDER);
     // TODO: add provider type
-    gravitinoCatalogManager.createCatalog(catalogName,
-        null, "", provider, descriptor.getConfiguration().toMap());
+    gravitinoCatalogManager.createCatalog(
+        catalogName, null, "", provider, descriptor.getConfiguration().toMap());
   }
 
   @Override
-  public void removeCatalog(String name, boolean b) throws CatalogException {
-
-  }
+  public void removeCatalog(String name, boolean b) throws CatalogException {}
 
   @Override
   public Optional<CatalogDescriptor> getCatalog(String catalogName) throws CatalogException {
@@ -56,12 +54,8 @@ public class GravitinoCatalogStore extends AbstractCatalogStore {
   }
 
   @Override
-  public void open() throws CatalogException {
-
-  }
+  public void open() throws CatalogException {}
 
   @Override
-  public void close() throws CatalogException {
-
-  }
+  public void close() throws CatalogException {}
 }

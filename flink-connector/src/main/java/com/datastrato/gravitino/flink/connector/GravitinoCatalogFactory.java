@@ -5,7 +5,7 @@
 
 package com.datastrato.gravitino.flink.connector;
 
-import com.datastrato.gravitino.flink.connector.catalog.FlinkGravitinoCatalog;
+import com.datastrato.gravitino.flink.connector.catalog.GravitinoFlinkCatalog;
 import java.util.Set;
 import org.apache.flink.configuration.ConfigOption;
 import org.apache.flink.table.catalog.Catalog;
@@ -21,7 +21,7 @@ public class GravitinoCatalogFactory implements CatalogFactory {
     helper.validate();
 
     String provider = context.getOptions().get("provider");
-    return new FlinkGravitinoCatalog("", "", provider);
+    return new GravitinoFlinkCatalog("", "", provider);
   }
 
   @Override

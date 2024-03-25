@@ -74,8 +74,14 @@ public class GravitinoCatalogManager {
     return metalakeName;
   }
 
-  public Catalog createCatalog(String catalogName, Type type, String comment, String provider, Map<String, String> properties) {
-    return metalake.createCatalog(NameIdentifier.ofCatalog(metalakeName, catalogName), type, provider, comment, properties);
+  public Catalog createCatalog(
+      String catalogName,
+      Type type,
+      String comment,
+      String provider,
+      Map<String, String> properties) {
+    return metalake.createCatalog(
+        NameIdentifier.ofCatalog(metalakeName, catalogName), type, provider, comment, properties);
   }
 
   public Set<String> listCatalogs() {

@@ -11,6 +11,8 @@ import com.datastrato.gravitino.flink.connector.GravitinoCatalogAdapter;
 import com.datastrato.gravitino.flink.connector.GravitinoCatalogAdapterFactory;
 import com.datastrato.gravitino.rel.Table;
 import java.util.List;
+import java.util.Optional;
+import org.apache.flink.connectors.hive.HiveDynamicTableFactory;
 import org.apache.flink.table.catalog.AbstractCatalog;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogDatabase;
@@ -34,8 +36,10 @@ import org.apache.flink.table.catalog.exceptions.TablePartitionedException;
 import org.apache.flink.table.catalog.stats.CatalogColumnStatistics;
 import org.apache.flink.table.catalog.stats.CatalogTableStatistics;
 import org.apache.flink.table.expressions.Expression;
+import org.apache.flink.table.factories.Factory;
+import org.apache.hadoop.hive.conf.HiveConf;
 
-public class FlinkGravitinoCatalog extends AbstractCatalog {
+public class GravitinoFlinkCatalog extends AbstractCatalog {
 
   // The Gravitino catalog client to do schema operations.
   protected Catalog gravitinoCatalogClient;
@@ -44,13 +48,15 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   private final GravitinoCatalogManager gravitinoCatalogManager;
 
   private GravitinoCatalogAdapter gravitinoCatalogAdapter;
+  private String provider;
 
-  public FlinkGravitinoCatalog(String catalogName, String defaultDatabase, String provider) {
+  public GravitinoFlinkCatalog(String catalogName, String defaultDatabase, String provider) {
     super(catalogName, defaultDatabase);
     this.gravitinoCatalogManager = GravitinoCatalogManager.get();
     this.metalakeName = gravitinoCatalogManager.getMetalakeName();
     this.gravitinoCatalogClient = gravitinoCatalogManager.getGravitinoCatalogInfo(catalogName);
     this.gravitinoCatalogAdapter = GravitinoCatalogAdapterFactory.createGravitinoAdaptor(provider);
+    this.provider = provider;
   }
 
   @Override
@@ -59,8 +65,16 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   }
 
   @Override
-  public void close() throws CatalogException {
+  public void close() throws CatalogException {}
 
+  @Override
+  public Optional<Factory> getFactory() {
+    switch (provider) {
+      case "hive":
+        HiveConf hiveConf = new HiveConf();
+        return Optional.of(new HiveDynamicTableFactory(hiveConf));
+    }
+    return Optional.empty();
   }
 
   @Override
@@ -80,21 +94,15 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
 
   @Override
   public void createDatabase(String s, CatalogDatabase catalogDatabase, boolean b)
-      throws DatabaseAlreadyExistException, CatalogException {
-
-  }
+      throws DatabaseAlreadyExistException, CatalogException {}
 
   @Override
   public void dropDatabase(String s, boolean b, boolean b1)
-      throws DatabaseNotExistException, DatabaseNotEmptyException, CatalogException {
-
-  }
+      throws DatabaseNotExistException, DatabaseNotEmptyException, CatalogException {}
 
   @Override
   public void alterDatabase(String s, CatalogDatabase catalogDatabase, boolean b)
-      throws DatabaseNotExistException, CatalogException {
-
-  }
+      throws DatabaseNotExistException, CatalogException {}
 
   @Override
   public List<String> listTables(String s) throws DatabaseNotExistException, CatalogException {
@@ -107,10 +115,10 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   }
 
   @Override
-  public CatalogBaseTable getTable(ObjectPath objectPath) throws TableNotExistException, CatalogException {
+  public CatalogBaseTable getTable(ObjectPath objectPath)
+      throws TableNotExistException, CatalogException {
     NameIdentifier nameIdentifier = toNameIdentifier(objectPath);
-    Table table = gravitinoCatalogClient.asTableCatalog()
-        .loadTable(nameIdentifier);
+    Table table = gravitinoCatalogClient.asTableCatalog().loadTable(nameIdentifier);
     return this.gravitinoCatalogAdapter.createFlinkBaseTable(table);
   }
 
@@ -124,27 +132,20 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   }
 
   @Override
-  public void dropTable(ObjectPath objectPath, boolean b) throws TableNotExistException, CatalogException {
-
-  }
+  public void dropTable(ObjectPath objectPath, boolean b)
+      throws TableNotExistException, CatalogException {}
 
   @Override
   public void renameTable(ObjectPath objectPath, String s, boolean b)
-      throws TableNotExistException, TableAlreadyExistException, CatalogException {
-
-  }
+      throws TableNotExistException, TableAlreadyExistException, CatalogException {}
 
   @Override
   public void createTable(ObjectPath objectPath, CatalogBaseTable catalogBaseTable, boolean b)
-      throws TableAlreadyExistException, DatabaseNotExistException, CatalogException {
-
-  }
+      throws TableAlreadyExistException, DatabaseNotExistException, CatalogException {}
 
   @Override
   public void alterTable(ObjectPath objectPath, CatalogBaseTable catalogBaseTable, boolean b)
-      throws TableNotExistException, CatalogException {
-
-  }
+      throws TableNotExistException, CatalogException {}
 
   @Override
   public List<CatalogPartitionSpec> listPartitions(ObjectPath objectPath)
@@ -153,19 +154,23 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   }
 
   @Override
-  public List<CatalogPartitionSpec> listPartitions(ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
-      throws TableNotExistException, TableNotPartitionedException, PartitionSpecInvalidException, CatalogException {
+  public List<CatalogPartitionSpec> listPartitions(
+      ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
+      throws TableNotExistException, TableNotPartitionedException, PartitionSpecInvalidException,
+          CatalogException {
     return null;
   }
 
   @Override
-  public List<CatalogPartitionSpec> listPartitionsByFilter(ObjectPath objectPath, List<Expression> list)
+  public List<CatalogPartitionSpec> listPartitionsByFilter(
+      ObjectPath objectPath, List<Expression> list)
       throws TableNotExistException, TableNotPartitionedException, CatalogException {
     return null;
   }
 
   @Override
-  public CatalogPartition getPartition(ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
+  public CatalogPartition getPartition(
+      ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
       throws PartitionNotExistException, CatalogException {
     return null;
   }
@@ -181,25 +186,22 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
       ObjectPath objectPath,
       CatalogPartitionSpec catalogPartitionSpec,
       CatalogPartition catalogPartition,
-      boolean b) throws TableNotExistException, TableNotPartitionedException, PartitionSpecInvalidException,
-      PartitionAlreadyExistsException, CatalogException {
-
-  }
+      boolean b)
+      throws TableNotExistException, TableNotPartitionedException, PartitionSpecInvalidException,
+          PartitionAlreadyExistsException, CatalogException {}
 
   @Override
-  public void dropPartition(ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec, boolean b)
-      throws PartitionNotExistException, CatalogException {
-
-  }
+  public void dropPartition(
+      ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec, boolean b)
+      throws PartitionNotExistException, CatalogException {}
 
   @Override
   public void alterPartition(
       ObjectPath objectPath,
       CatalogPartitionSpec catalogPartitionSpec,
       CatalogPartition catalogPartition,
-      boolean b) throws PartitionNotExistException, CatalogException {
-
-  }
+      boolean b)
+      throws PartitionNotExistException, CatalogException {}
 
   @Override
   public List<String> listFunctions(String s) throws DatabaseNotExistException, CatalogException {
@@ -207,7 +209,8 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   }
 
   @Override
-  public CatalogFunction getFunction(ObjectPath objectPath) throws FunctionNotExistException, CatalogException {
+  public CatalogFunction getFunction(ObjectPath objectPath)
+      throws FunctionNotExistException, CatalogException {
     return null;
   }
 
@@ -218,20 +221,15 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
 
   @Override
   public void createFunction(ObjectPath objectPath, CatalogFunction catalogFunction, boolean b)
-      throws FunctionAlreadyExistException, DatabaseNotExistException, CatalogException {
-
-  }
+      throws FunctionAlreadyExistException, DatabaseNotExistException, CatalogException {}
 
   @Override
   public void alterFunction(ObjectPath objectPath, CatalogFunction catalogFunction, boolean b)
-      throws FunctionNotExistException, CatalogException {
-
-  }
+      throws FunctionNotExistException, CatalogException {}
 
   @Override
-  public void dropFunction(ObjectPath objectPath, boolean b) throws FunctionNotExistException, CatalogException {
-
-  }
+  public void dropFunction(ObjectPath objectPath, boolean b)
+      throws FunctionNotExistException, CatalogException {}
 
   @Override
   public CatalogTableStatistics getTableStatistics(ObjectPath objectPath)
@@ -246,47 +244,42 @@ public class FlinkGravitinoCatalog extends AbstractCatalog {
   }
 
   @Override
-  public CatalogTableStatistics getPartitionStatistics(ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
+  public CatalogTableStatistics getPartitionStatistics(
+      ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
       throws PartitionNotExistException, CatalogException {
     return null;
   }
 
   @Override
   public CatalogColumnStatistics getPartitionColumnStatistics(
-      ObjectPath objectPath,
-      CatalogPartitionSpec catalogPartitionSpec) throws PartitionNotExistException, CatalogException {
+      ObjectPath objectPath, CatalogPartitionSpec catalogPartitionSpec)
+      throws PartitionNotExistException, CatalogException {
     return null;
   }
 
   @Override
-  public void alterTableStatistics(ObjectPath objectPath, CatalogTableStatistics catalogTableStatistics, boolean b)
-      throws TableNotExistException, CatalogException {
-
-  }
+  public void alterTableStatistics(
+      ObjectPath objectPath, CatalogTableStatistics catalogTableStatistics, boolean b)
+      throws TableNotExistException, CatalogException {}
 
   @Override
   public void alterTableColumnStatistics(
-      ObjectPath objectPath,
-      CatalogColumnStatistics catalogColumnStatistics,
-      boolean b) throws TableNotExistException, CatalogException, TablePartitionedException {
-
-  }
+      ObjectPath objectPath, CatalogColumnStatistics catalogColumnStatistics, boolean b)
+      throws TableNotExistException, CatalogException, TablePartitionedException {}
 
   @Override
   public void alterPartitionStatistics(
       ObjectPath objectPath,
       CatalogPartitionSpec catalogPartitionSpec,
       CatalogTableStatistics catalogTableStatistics,
-      boolean b) throws PartitionNotExistException, CatalogException {
-
-  }
+      boolean b)
+      throws PartitionNotExistException, CatalogException {}
 
   @Override
   public void alterPartitionColumnStatistics(
       ObjectPath objectPath,
       CatalogPartitionSpec catalogPartitionSpec,
       CatalogColumnStatistics catalogColumnStatistics,
-      boolean b) throws PartitionNotExistException, CatalogException {
-
-  }
+      boolean b)
+      throws PartitionNotExistException, CatalogException {}
 }

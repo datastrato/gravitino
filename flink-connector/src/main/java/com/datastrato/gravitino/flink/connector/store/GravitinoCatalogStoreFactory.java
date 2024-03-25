@@ -5,6 +5,11 @@
 
 package com.datastrato.gravitino.flink.connector.store;
 
+import static com.datastrato.gravitino.flink.connector.store.GravitinoCatalogStoreFactoryOptions.GRAVITINO;
+import static com.datastrato.gravitino.flink.connector.store.GravitinoCatalogStoreFactoryOptions.METALAKE_NAME;
+import static com.datastrato.gravitino.flink.connector.store.GravitinoCatalogStoreFactoryOptions.METALAKE_URL;
+import static org.apache.flink.table.factories.FactoryUtil.createCatalogStoreFactoryHelper;
+
 import com.datastrato.gravitino.flink.connector.catalog.GravitinoCatalogManager;
 import java.util.Set;
 import org.apache.flink.configuration.ConfigOption;
@@ -13,11 +18,6 @@ import org.apache.flink.table.catalog.CatalogStore;
 import org.apache.flink.table.catalog.exceptions.CatalogException;
 import org.apache.flink.table.factories.CatalogStoreFactory;
 import org.apache.flink.table.factories.FactoryUtil;
-
-import static com.datastrato.gravitino.flink.connector.store.GravitinoCatalogStoreFactoryOptions.GRAVITINO;
-import static com.datastrato.gravitino.flink.connector.store.GravitinoCatalogStoreFactoryOptions.METALAKE_NAME;
-import static com.datastrato.gravitino.flink.connector.store.GravitinoCatalogStoreFactoryOptions.METALAKE_URL;
-import static org.apache.flink.table.factories.FactoryUtil.createCatalogStoreFactoryHelper;
 
 public class GravitinoCatalogStoreFactory implements CatalogStoreFactory {
   private GravitinoCatalogManager catalogManager;

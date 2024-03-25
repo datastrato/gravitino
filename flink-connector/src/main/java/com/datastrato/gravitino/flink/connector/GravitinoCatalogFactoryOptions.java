@@ -12,9 +12,7 @@ public class GravitinoCatalogFactoryOptions {
   public static final String IDENTIFIER = "gravitino";
 
   public static final ConfigOption<String> DEFAULT_DATABASE =
-      ConfigOptions.key("default.db")
-          .stringType()
-          .defaultValue("default");
+      ConfigOptions.key("default.db").stringType().defaultValue("default");
 
   private GravitinoCatalogFactoryOptions() {}
 }

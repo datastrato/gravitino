@@ -26,9 +26,9 @@ public class GravitinoCatalogStoreFactoryOptions {
           .withDescription("The name of gravitino metalake");
 
   public static final ConfigOption<String> PROVIDER =
-      ConfigOptions
-          .key("provider")
+      ConfigOptions.key("provider")
           .stringType()
           .noDefaultValue()
-          .withDescription("The provider of the catalog, such as hive, hadoop, jdbc-mysql and so on");
+          .withDescription(
+              "The provider of the catalog, such as hive, hadoop, jdbc-mysql and so on");
 }
