@@ -225,9 +225,10 @@ public class HiveTableOperations implements TableOperations, SupportsPartitions 
   public boolean dropPartition(String partitionName, boolean ifExists)
       throws NoSuchPartitionException {
     try {
-      // Get all children partitions for one parent partition name,
-      // cascade delete the parent partition of all its children partitions
       Table hiveTable = table.clientPool().run(c -> c.getTable(table.schemaName(), table.name()));
+      // Get partitions that need to drop
+      // If the partition has child partition, then drop all the child partitions of the parent partition cascade
+      // If the partition is a completed partition, then just drop one partition
       List<org.apache.hadoop.hive.metastore.api.Partition> partitions =
           table
               .clientPool()
@@ -277,6 +278,18 @@ public class HiveTableOperations implements TableOperations, SupportsPartitions 
     return true;
   }
 
+  /**
+   * Convert partition format [String -> Array], to get the query criteria of hmsClient.listPartitions()
+   * Example : for a three-level partitioned table "log_date=xxxx/log_hour=xx/log_hour=xx"
+   * 1. input partition: "log_date=0101/log_hour=01/log_hour=02"
+   * Query criteria: ["0101","01","02"], hmsClient.listPartitions() will return the partition detail of "log_date=0101/log_hour=01/log_hour=02"
+   * 2. input partition: "log_date=0101"
+   * Query criteria: ["0101","",""], hmsClient.listPartitions() will return the detail of all partition that contains "log_date=0101"
+   * @param dropTable table details
+   * @param partitionSpec partition in String format
+   * @return the filter partition list
+   * @throws NoSuchPartitionException
+   */
   private List<String> getFilterPartitionValueList(Table dropTable, String partitionSpec)
       throws NoSuchPartitionException {
     Map<String, String> partMap = new HashMap<>();
