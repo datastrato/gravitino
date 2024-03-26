@@ -33,11 +33,14 @@ import com.datastrato.gravitino.exceptions.IllegalNamespaceException;
 import com.datastrato.gravitino.exceptions.NoSuchEntityException;
 import com.datastrato.gravitino.file.Fileset;
 import com.datastrato.gravitino.file.FilesetChange;
+import com.datastrato.gravitino.messaging.Topic;
+import com.datastrato.gravitino.messaging.TopicChange;
 import com.datastrato.gravitino.meta.AuditInfo;
 import com.datastrato.gravitino.meta.BaseMetalake;
 import com.datastrato.gravitino.meta.SchemaEntity;
 import com.datastrato.gravitino.meta.SchemaVersion;
 import com.datastrato.gravitino.meta.TableEntity;
+import com.datastrato.gravitino.meta.TopicEntity;
 import com.datastrato.gravitino.rel.Column;
 import com.datastrato.gravitino.rel.Schema;
 import com.datastrato.gravitino.rel.SchemaChange;
@@ -650,6 +653,166 @@ public class TestCatalogOperationDispatcher {
 
     boolean dropped = dispatcher.dropFileset(filesetIdent1);
     Assertions.assertTrue(dropped);
+  }
+
+  @Test
+  public void testCreateAndListTopics() {
+    Namespace topicNs = Namespace.of(metalake, catalog, "schema121");
+    Map<String, String> props = ImmutableMap.of("k1", "v1", "k2", "v2");
+    dispatcher.createSchema(NameIdentifier.of(topicNs.levels()), "comment", props);
+
+    NameIdentifier topicIdent1 = NameIdentifier.of(topicNs, "topic1");
+    Topic topic1 = dispatcher.createTopic(topicIdent1, "comment", null, props);
+    Assertions.assertEquals("topic1", topic1.name());
+    Assertions.assertEquals("comment", topic1.comment());
+    testProperties(props, topic1.properties());
+
+    NameIdentifier[] idents = dispatcher.listTopics(topicNs);
+    Assertions.assertEquals(1, idents.length);
+    Assertions.assertEquals(topicIdent1, idents[0]);
+
+    Map<String, String> illegalProps = ImmutableMap.of("k2", "v2");
+    testPropertyException(
+        () -> dispatcher.createTopic(topicIdent1, "comment", null, illegalProps),
+        "Properties are required and must be set");
+
+    Map<String, String> illegalProps2 = ImmutableMap.of("k1", "v1", ID_KEY, "test");
+    testPropertyException(
+        () -> dispatcher.createTopic(topicIdent1, "comment", null, illegalProps2),
+        "Properties are reserved and cannot be set",
+        "gravitino.identifier");
+  }
+
+  @Test
+  public void testCreateAndLoadTopic() throws IOException {
+    Namespace topicNs = Namespace.of(metalake, catalog, "schema131");
+    Map<String, String> props = ImmutableMap.of("k1", "v1", "k2", "v2");
+    dispatcher.createSchema(NameIdentifier.of(topicNs.levels()), "comment", props);
+
+    NameIdentifier topicIdent1 = NameIdentifier.of(topicNs, "topic11");
+    Topic topic1 = dispatcher.createTopic(topicIdent1, "comment", null, props);
+    Assertions.assertEquals("topic11", topic1.name());
+    Assertions.assertEquals("comment", topic1.comment());
+    testProperties(props, topic1.properties());
+
+    Topic loadedTopic1 = dispatcher.loadTopic(topicIdent1);
+    Assertions.assertEquals(topic1.name(), loadedTopic1.name());
+    Assertions.assertEquals(topic1.comment(), loadedTopic1.comment());
+    testProperties(props, loadedTopic1.properties());
+    // Audit info is gotten from the entity store
+    Assertions.assertEquals(AuthConstants.ANONYMOUS_USER, loadedTopic1.auditInfo().creator());
+
+    // Case 2: Test if the topic entity is not found in the entity store
+    reset(entityStore);
+    doThrow(new NoSuchEntityException("")).when(entityStore).get(any(), any(), any());
+    Topic loadedTopic2 = dispatcher.loadTopic(topicIdent1);
+    // Audit info is gotten from the catalog, not from the entity store
+    Assertions.assertEquals("test", loadedTopic2.auditInfo().creator());
+
+    // Case 3: Test if the entity store is failed to get the topic entity
+    reset(entityStore);
+    doThrow(new IOException()).when(entityStore).get(any(), any(), any());
+    Topic loadedTopic3 = dispatcher.loadTopic(topicIdent1);
+    // Audit info is gotten from the catalog, not from the entity store
+    Assertions.assertEquals("test", loadedTopic3.auditInfo().creator());
+
+    // Case 4: Test if the topic entity is not matched
+    reset(entityStore);
+    TopicEntity unmatchedEntity =
+        TopicEntity.builder()
+            .withId(1L)
+            .withName("topic11")
+            .withNamespace(topicNs)
+            .withAuditInfo(
+                AuditInfo.builder().withCreator("gravitino").withCreateTime(Instant.now()).build())
+            .build();
+    doReturn(unmatchedEntity).when(entityStore).get(any(), any(), any());
+    Topic loadedTopic4 = dispatcher.loadTopic(topicIdent1);
+    // Audit info is gotten from the catalog, not from the entity store
+    Assertions.assertEquals("test", loadedTopic4.auditInfo().creator());
+  }
+
+  @Test
+  public void testCreateAndAlterTopic() throws IOException {
+    Namespace topicNs = Namespace.of(metalake, catalog, "schema141");
+    Map<String, String> props = ImmutableMap.of("k1", "v1", "k2", "v2");
+    dispatcher.createSchema(NameIdentifier.of(topicNs.levels()), "comment", props);
+
+    NameIdentifier topicIdent = NameIdentifier.of(topicNs, "topic21");
+    Topic topic = dispatcher.createTopic(topicIdent, "comment", null, props);
+
+    TopicChange[] changes =
+        new TopicChange[] {TopicChange.setProperty("k3", "v3"), TopicChange.removeProperty("k1")};
+
+    Topic alteredTopic = dispatcher.alterTopic(topicIdent, changes);
+    Assertions.assertEquals(topic.name(), alteredTopic.name());
+    Assertions.assertEquals(topic.comment(), alteredTopic.comment());
+    Map<String, String> expectedProps = ImmutableMap.of("k2", "v2", "k3", "v3");
+    testProperties(expectedProps, alteredTopic.properties());
+    // Audit info is gotten from gravitino entity store
+    Assertions.assertEquals(AuthConstants.ANONYMOUS_USER, alteredTopic.auditInfo().creator());
+    Assertions.assertEquals(AuthConstants.ANONYMOUS_USER, alteredTopic.auditInfo().lastModifier());
+
+    // Case 2: Test if the topic entity is not found in the entity store
+    reset(entityStore);
+    doThrow(new NoSuchEntityException("")).when(entityStore).update(any(), any(), any(), any());
+    Topic alteredTopic2 = dispatcher.alterTopic(topicIdent, changes);
+    // Audit info is gotten from the catalog, not from the entity store
+    Assertions.assertEquals("test", alteredTopic2.auditInfo().creator());
+    Assertions.assertEquals("test", alteredTopic2.auditInfo().lastModifier());
+
+    // Case 3: Test if the entity store is failed to update the topic entity
+    reset(entityStore);
+    doThrow(new IOException()).when(entityStore).update(any(), any(), any(), any());
+    Topic alteredTopic3 = dispatcher.alterTopic(topicIdent, changes);
+    // Audit info is gotten from the catalog, not from the entity store
+    Assertions.assertEquals("test", alteredTopic3.auditInfo().creator());
+    Assertions.assertEquals("test", alteredTopic3.auditInfo().lastModifier());
+
+    // Case 4: Test if the topic entity is not matched
+    reset(entityStore);
+    TopicEntity unmatchedEntity =
+        TopicEntity.builder()
+            .withId(1L)
+            .withName("topic21")
+            .withNamespace(topicNs)
+            .withAuditInfo(
+                AuditInfo.builder().withCreator("gravitino").withCreateTime(Instant.now()).build())
+            .build();
+    doReturn(unmatchedEntity).when(entityStore).update(any(), any(), any(), any());
+    Topic alteredTopic4 = dispatcher.alterTopic(topicIdent, changes);
+    // Audit info is gotten from the catalog, not from the entity store
+    Assertions.assertEquals("test", alteredTopic4.auditInfo().creator());
+    Assertions.assertEquals("test", alteredTopic4.auditInfo().lastModifier());
+
+    // Test immutable topic properties
+    TopicChange[] illegalChange =
+        new TopicChange[] {TopicChange.setProperty(COMMENT_KEY, "new comment")};
+    testPropertyException(
+        () -> dispatcher.alterTopic(topicIdent, illegalChange),
+        "Property comment is immutable or reserved, cannot be set");
+  }
+
+  @Test
+  public void testCreateAndDropTopic() throws IOException {
+    Namespace topicNs = Namespace.of(metalake, catalog, "schema151");
+    Map<String, String> props = ImmutableMap.of("k1", "v1", "k2", "v2");
+    dispatcher.createSchema(NameIdentifier.of(topicNs.levels()), "comment", props);
+
+    NameIdentifier topicIdent = NameIdentifier.of(topicNs, "topic31");
+    Topic topic = dispatcher.createTopic(topicIdent, "comment", null, props);
+    Assertions.assertEquals("topic31", topic.name());
+    Assertions.assertEquals("comment", topic.comment());
+    testProperties(props, topic.properties());
+
+    boolean dropped = dispatcher.dropTopic(topicIdent);
+    Assertions.assertTrue(dropped);
+
+    // Test if the entity store is failed to drop the topic entity
+    dispatcher.createTopic(topicIdent, "comment", null, props);
+    reset(entityStore);
+    doThrow(new IOException()).when(entityStore).delete(any(), any(), anyBoolean());
+    Assertions.assertThrows(RuntimeException.class, () -> dispatcher.dropTopic(topicIdent));
   }
 
   @Test
