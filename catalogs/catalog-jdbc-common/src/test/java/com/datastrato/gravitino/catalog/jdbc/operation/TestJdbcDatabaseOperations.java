@@ -98,4 +98,39 @@ public class TestJdbcDatabaseOperations {
     JDBC_DATABASE_OPERATIONS.delete(database2);
     Assertions.assertNull(JDBC_DATABASE_OPERATIONS.load(database2));
   }
+
+  @Test
+  public void testDropDatabaseWithPathTraversal() {
+    // delete should throw an exception with string that might contain path traversal attack
+    String filePathInjection = "../important_file";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          JDBC_DATABASE_OPERATIONS.delete(filePathInjection);
+        });
+
+    // delete should throw an exception with string that might contain path traversal attack
+    String filePathInjection1 = "../../../../important_file.db";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          JDBC_DATABASE_OPERATIONS.delete(filePathInjection1);
+        });
+
+    // delete should throw an exception with string that might contain path traversal attack
+    String filePathInjection2 = ".hidden_file";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          JDBC_DATABASE_OPERATIONS.delete(filePathInjection2);
+        });
+
+    // delete should throw an exception with string that might contain path traversal attack
+    String filePathInjection3 = "../../../.bashrc";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          JDBC_DATABASE_OPERATIONS.delete(filePathInjection3);
+        });
+  }
 }

@@ -126,6 +126,23 @@ public class PostgreSqlSchemaOperations extends JdbcDatabaseOperations {
   }
 
   @Override
+  protected void validateDatabaseName(String schema) {
+    if (StringUtils.isBlank(schema)) {
+      throw new IllegalArgumentException("Schema name cannot be empty.");
+    }
+    if (schema.length() > 63) {
+      throw new IllegalArgumentException("Schema name cannot be longer than 63 characters.");
+    }
+    // Regex that matches any string that starts with an underscore, a letter, or a Unicode letter,
+    // followed by zero or more word characters, Unicode letters, or dollar signs
+    // \w matches [a-zA-Z0-9_]
+    // \p{L} matches any kind of letter from any language
+    if (!schema.matches("^[_a-zA-Z\\p{L}][\\w\\p{L}$]*$")) {
+      throw new IllegalArgumentException(String.format("Invalid schema name '%s'.", schema));
+    }
+  }
+
+  @Override
   protected Connection getConnection() throws SQLException {
     Connection connection = dataSource.getConnection();
     connection.setCatalog(database);

@@ -102,4 +102,51 @@ public class TestPostgreSqlSchemaOperations extends TestPostgreSqlAbstractIT {
     JdbcSchema load = postgreSqlSchemaOperations.load(schema_1);
     Assertions.assertEquals(schema_1, load.name());
   }
+
+  @Test
+  public void testDropDatabaseWithSqlInjection() {
+    String databaseName = RandomNameUtils.genRandomName("ct_db");
+
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection = databaseName + "; DROP TABLE important_table; -- ";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection);
+        });
+
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection1 = databaseName + "; SELECT pg_sleep(10);";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection1);
+        });
+
+    // testDropDatabase should throw an exception with string that might contain SQL injection
+    String sqlInjection2 =
+        databaseName + "`; UPDATE Users SET password = 'newpassword' WHERE username = 'admin'; -- ";
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(sqlInjection2);
+        });
+
+    // testDropDatabase should throw an exception with input that has more than 64 characters
+    String invalidInput = StringUtils.repeat("a", 64);
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(invalidInput);
+        });
+
+    // testDropDatabase should throw an exception with schema name that starts with special
+    // character
+    String invalidInput2 = RandomNameUtils.genRandomName("$test_db");
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () -> {
+          testDropDatabase(invalidInput2);
+        });
+  }
 }
