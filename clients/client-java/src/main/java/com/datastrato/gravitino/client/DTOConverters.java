@@ -7,6 +7,7 @@ package com.datastrato.gravitino.client;
 import com.datastrato.gravitino.Catalog;
 import com.datastrato.gravitino.CatalogChange;
 import com.datastrato.gravitino.MetalakeChange;
+import com.datastrato.gravitino.Namespace;
 import com.datastrato.gravitino.dto.AuditDTO;
 import com.datastrato.gravitino.dto.CatalogDTO;
 import com.datastrato.gravitino.dto.MetalakeDTO;
@@ -57,10 +58,12 @@ class DTOConverters {
   }
 
   @SuppressWarnings("unchecked")
-  static Catalog toCatalog(CatalogDTO catalog, RESTClient client) {
+  static Catalog toCatalog(String metalake, CatalogDTO catalog, RESTClient client) {
+    Namespace namespace = Namespace.ofCatalog(metalake);
     switch (catalog.type()) {
       case RELATIONAL:
         return RelationalCatalog.builder()
+            .withNamespace(namespace)
             .withName(catalog.name())
             .withType(catalog.type())
             .withProvider(catalog.provider())
@@ -72,6 +75,7 @@ class DTOConverters {
 
       case FILESET:
         return FilesetCatalog.builder()
+            .withNamespace(namespace)
             .withName(catalog.name())
             .withType(catalog.type())
             .withProvider(catalog.provider())

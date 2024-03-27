@@ -10,6 +10,7 @@ import com.datastrato.gravitino.CatalogChange;
 import com.datastrato.gravitino.NameIdentifier;
 import com.datastrato.gravitino.Namespace;
 import com.datastrato.gravitino.SupportsCatalogs;
+import com.datastrato.gravitino.client.api.SupportsCatalog;
 import com.datastrato.gravitino.exceptions.CatalogAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.NoSuchCatalogException;
 import com.datastrato.gravitino.exceptions.NoSuchMetalakeException;
@@ -25,7 +26,8 @@ import org.slf4j.LoggerFactory;
  * <p>It uses an underlying {@link RESTClient} to send HTTP requests and receive responses from the
  * API.
  */
-public class GravitinoClient extends GravitinoClientBase implements SupportsCatalogs {
+public class GravitinoClient extends GravitinoClientBase
+    implements SupportsCatalogs, SupportsCatalog {
 
   private static final Logger LOG = LoggerFactory.getLogger(GravitinoClient.class);
 
@@ -84,6 +86,43 @@ public class GravitinoClient extends GravitinoClientBase implements SupportsCata
   @Override
   public boolean dropCatalog(NameIdentifier ident) {
     return getMetalake().dropCatalog(ident);
+  }
+
+  @Override
+  public NameIdentifier[] listCatalogs() throws NoSuchMetalakeException {
+    return getMetalake().listCatalogs();
+  }
+
+  @Override
+  public Catalog loadCatalog(String catalogName) throws NoSuchCatalogException {
+    return getMetalake().loadCatalog(catalogName);
+  }
+
+  @Override
+  public boolean catalogExists(String catalogName) {
+    return getMetalake().catalogExists(catalogName);
+  }
+
+  @Override
+  public Catalog createCatalog(
+      String catalogName,
+      Catalog.Type type,
+      String provider,
+      String comment,
+      Map<String, String> properties)
+      throws NoSuchMetalakeException, CatalogAlreadyExistsException {
+    return getMetalake().createCatalog(catalogName, type, provider, comment, properties);
+  }
+
+  @Override
+  public Catalog alterCatalog(String catalogName, CatalogChange... changes)
+      throws NoSuchCatalogException, IllegalArgumentException {
+    return getMetalake().alterCatalog(catalogName, changes);
+  }
+
+  @Override
+  public boolean dropCatalog(String catalogName) {
+    return getMetalake().dropCatalog(catalogName);
   }
 
   /**
