@@ -17,6 +17,7 @@ import static com.datastrato.gravitino.catalog.mysql.converter.MysqlTypeConverte
 import static com.datastrato.gravitino.catalog.mysql.converter.MysqlTypeConverter.FLOAT;
 import static com.datastrato.gravitino.catalog.mysql.converter.MysqlTypeConverter.INT;
 import static com.datastrato.gravitino.catalog.mysql.converter.MysqlTypeConverter.TINYINT;
+import static com.datastrato.gravitino.catalog.mysql.converter.MysqlTypeConverter.INT_UNSIGNED;
 
 import com.datastrato.gravitino.catalog.jdbc.converter.JdbcTypeConverter;
 import com.datastrato.gravitino.rel.types.Type;
@@ -34,6 +35,7 @@ public class TestMysqlTypeConverter {
   public void testToGravitinoType() {
     checkJdbcTypeToGravitinoType(Types.ByteType.get(), TINYINT, null, null);
     checkJdbcTypeToGravitinoType(Types.IntegerType.get(), INT, null, null);
+    checkJdbcTypeToGravitinoType(Types.LongType.get(), INT_UNSIGNED, null, null);
     checkJdbcTypeToGravitinoType(Types.LongType.get(), BIGINT, null, null);
     checkJdbcTypeToGravitinoType(Types.FloatType.get(), FLOAT, null, null);
     checkJdbcTypeToGravitinoType(Types.DoubleType.get(), DOUBLE, null, null);
