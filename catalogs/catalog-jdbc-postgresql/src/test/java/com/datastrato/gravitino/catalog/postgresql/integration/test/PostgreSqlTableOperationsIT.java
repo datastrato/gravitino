@@ -17,6 +17,7 @@ import com.datastrato.gravitino.exceptions.GravitinoRuntimeException;
 import com.datastrato.gravitino.exceptions.NoSuchTableException;
 import com.datastrato.gravitino.rel.TableChange;
 import com.datastrato.gravitino.rel.expressions.distributions.Distributions;
+import com.datastrato.gravitino.rel.expressions.literals.Literals;
 import com.datastrato.gravitino.rel.indexes.Index;
 import com.datastrato.gravitino.rel.indexes.Indexes;
 import com.datastrato.gravitino.rel.types.Type;
@@ -67,8 +68,7 @@ public class PostgreSqlTableOperationsIT extends TestPostgreSqlAbstractIT {
         JdbcColumn.builder()
             .withName("col_4")
             .withType(VARCHAR)
-            // TODO: uncomment this line when default value is supported
-            // .withDefaultValue("hello world")
+            .withDefaultValue(Literals.of("hello world", VARCHAR))
             .withNullable(false)
             .build());
     Map<String, String> properties = new HashMap<>();
@@ -112,6 +112,8 @@ public class PostgreSqlTableOperationsIT extends TestPostgreSqlAbstractIT {
         TableChange.updateColumnComment(new String[] {columns.get(0).name()}, "test_new_comment"),
         TableChange.updateColumnType(
             new String[] {columns.get(1).name()}, Types.DecimalType.of(10, 2)),
+        TableChange.updateColumnDefaultValue(
+            new String[] {columns.get(3).name()}, Literals.of("new hello world", VARCHAR)),
         TableChange.deleteColumn(new String[] {columns.get(2).name()}, true));
     load = TABLE_OPERATIONS.load(TEST_DB_NAME, newName);
     List<JdbcColumn> alterColumns = new ArrayList<JdbcColumn>();
@@ -130,7 +132,13 @@ public class PostgreSqlTableOperationsIT extends TestPostgreSqlAbstractIT {
             .withNullable(false)
             .withComment("set test key")
             .build());
-    alterColumns.add(columns.get(3));
+    alterColumns.add(
+        JdbcColumn.builder()
+            .withName("col_4")
+            .withType(VARCHAR)
+            .withDefaultValue(Literals.of("new hello world", VARCHAR))
+            .withNullable(false)
+            .build());
     alterColumns.add(newColumn);
     assertionsTableInfo(newName, tableComment, alterColumns, properties, null, load);
 
@@ -156,7 +164,13 @@ public class PostgreSqlTableOperationsIT extends TestPostgreSqlAbstractIT {
             .withNullable(false)
             .withComment("set test key")
             .build());
-    alterColumns.add(columns.get(3));
+    alterColumns.add(
+        JdbcColumn.builder()
+            .withName("col_4")
+            .withType(VARCHAR)
+            .withDefaultValue(Literals.of("new hello world", VARCHAR))
+            .withNullable(false)
+            .build());
     alterColumns.add(newColumn);
     assertionsTableInfo(newName, tableComment, alterColumns, properties, null, load);
 
@@ -180,7 +194,13 @@ public class PostgreSqlTableOperationsIT extends TestPostgreSqlAbstractIT {
             .withNullable(true)
             .withComment("set test key")
             .build());
-    alterColumns.add(columns.get(3));
+    alterColumns.add(
+        JdbcColumn.builder()
+            .withName("col_4")
+            .withType(VARCHAR)
+            .withDefaultValue(Literals.of("new hello world", VARCHAR))
+            .withNullable(false)
+            .build());
     alterColumns.add(newColumn);
     assertionsTableInfo(newName, tableComment, alterColumns, properties, null, load);
 

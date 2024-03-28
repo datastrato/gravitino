@@ -24,6 +24,8 @@ import com.datastrato.gravitino.rel.TableChange.UpdateColumnDefaultValue;
 import com.datastrato.gravitino.rel.TableChange.UpdateColumnPosition;
 import com.datastrato.gravitino.rel.TableChange.UpdateColumnType;
 import com.datastrato.gravitino.rel.TableChange.UpdateComment;
+import com.datastrato.gravitino.rel.expressions.Expression;
+import com.datastrato.gravitino.rel.expressions.literals.Literals;
 import com.datastrato.gravitino.rel.types.Type;
 import com.datastrato.gravitino.rel.types.Types;
 import org.junit.jupiter.api.Test;
@@ -202,7 +204,7 @@ public class TestTableChange {
   @Test
   public void testUpdateColumnDefaultValue() {
     String[] fieldName = {"existing_column"};
-    String newDefaultValue = "default_value";
+    Expression newDefaultValue = Literals.of("Default Value", Types.VarCharType.of(255));
     UpdateColumnDefaultValue updateColumnDefaultValue =
         (UpdateColumnDefaultValue) TableChange.updateColumnDefaultValue(fieldName, newDefaultValue);
 
@@ -213,7 +215,7 @@ public class TestTableChange {
   @Test
   public void testUpdateNestedColumnDefaultValue() {
     String[] fieldName = {"nested", "existing_column"};
-    String newDefaultValue = "default_value";
+    Expression newDefaultValue = Literals.of("Default Value", Types.VarCharType.of(255));
     UpdateColumnDefaultValue updateColumnType =
         (UpdateColumnDefaultValue) TableChange.updateColumnDefaultValue(fieldName, newDefaultValue);
 
@@ -380,11 +382,11 @@ public class TestTableChange {
   @Test
   void testUpdateColumnDefaultValueEqualsAndHashCode() {
     String[] nameA = {"Column Name"};
-    String newDefaultValueA = "Default Value";
+    Expression newDefaultValueA = Literals.of("Default Value", Types.VarCharType.of(255));
     UpdateColumnDefaultValue columnA =
         (UpdateColumnDefaultValue) TableChange.updateColumnDefaultValue(nameA, newDefaultValueA);
     String[] nameB = {"Column Name"};
-    String newDefaultValueB = "Default Value";
+    Expression newDefaultValueB = Literals.of("Default Value", Types.VarCharType.of(255));
     UpdateColumnDefaultValue columnB =
         (UpdateColumnDefaultValue) TableChange.updateColumnDefaultValue(nameB, newDefaultValueB);
 
@@ -396,11 +398,11 @@ public class TestTableChange {
   @Test
   void testUpdateColumnDefaultValueNotEqualsAndHashCode() {
     String[] nameA = {"Column Name A"};
-    String newDefaultValueA = "New Default Value A";
+    Expression newDefaultValueA = Literals.of("New Default Value A", Types.VarCharType.of(255));
     UpdateColumnDefaultValue columnA =
         (UpdateColumnDefaultValue) TableChange.updateColumnDefaultValue(nameA, newDefaultValueA);
     String[] nameB = {"Column Name B"};
-    String newDefaultValueB = "New Default Value B";
+    Expression newDefaultValueB = Literals.of("New Default Value B", Types.VarCharType.of(255));
     UpdateColumnDefaultValue columnB =
         (UpdateColumnDefaultValue) TableChange.updateColumnDefaultValue(nameB, newDefaultValueB);
 
