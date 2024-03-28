@@ -7,6 +7,7 @@ package com.datastrato.gravitino.integration.test.spark;
 import com.datastrato.gravitino.integration.test.util.spark.SparkTableInfo;
 import com.datastrato.gravitino.integration.test.util.spark.SparkTableInfo.SparkColumnInfo;
 import com.datastrato.gravitino.integration.test.util.spark.SparkTableInfoChecker;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -21,12 +22,12 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
-import org.junit.platform.commons.util.StringUtils;
 
 public abstract class SparkCommonIT extends SparkEnvIT {
 
@@ -47,6 +48,23 @@ public abstract class SparkCommonIT extends SparkEnvIT {
                   DataTypes.createStructField("col2", DataTypes.StringType, true))),
           "struct(1, 'a')");
 
+  // To generate test data for update table.
+  private static final Map<DataType, String> typeNewConstant =
+      ImmutableMap.of(
+          DataTypes.IntegerType,
+          "2",
+          DataTypes.StringType,
+          "'gravitino_it_test_new'",
+          DataTypes.createArrayType(DataTypes.IntegerType),
+          "array(4, 5, 6)",
+          DataTypes.createMapType(DataTypes.StringType, DataTypes.IntegerType),
+          "map('b', 2)",
+          DataTypes.createStructType(
+              Arrays.asList(
+                  DataTypes.createStructField("col1", DataTypes.IntegerType, true),
+                  DataTypes.createStructField("col2", DataTypes.StringType, true))),
+          "struct(2, 'b')");
+
   private static String getInsertWithoutPartitionSql(String tableName, String values) {
     return String.format("INSERT INTO %s VALUES (%s)", tableName, values);
   }
@@ -57,11 +75,39 @@ public abstract class SparkCommonIT extends SparkEnvIT {
         "INSERT OVERWRITE %s PARTITION (%s) VALUES (%s)", tableName, partitionString, values);
   }
 
+  private static String getUpdateTableSql(String tableName, String setClause, String whereClause) {
+    return String.format("UPDATE %s SET %s WHERE %s", tableName, setClause, whereClause);
+  }
+
+  private static String getRowLevelUpdateTableSql(
+      String targetTableName, String selectClause, String sourceTableName, String onClause) {
+    return String.format(
+        "MERGE INTO %s "
+            + "USING (SELECT %s) %s "
+            + "ON %s "
+            + "WHEN MATCHED THEN UPDATE SET * "
+            + "WHEN NOT MATCHED THEN INSERT *",
+        targetTableName, selectClause, sourceTableName, onClause);
+  }
+
+  private static String getRowLevelDeleteTableSql(
+      String targetTableName, String selectClause, String sourceTableName, String onClause) {
+    return String.format(
+        "MERGE INTO %s "
+            + "USING (SELECT %s) %s "
+            + "ON %s "
+            + "WHEN MATCHED THEN DELETE "
+            + "WHEN NOT MATCHED THEN INSERT *",
+        targetTableName, selectClause, sourceTableName, onClause);
+  }
+
   // Whether supports [CLUSTERED BY col_name3 SORTED BY col_name INTO num_buckets BUCKETS]
   protected abstract boolean supportsSparkSQLClusteredBy();
 
-  // Use a custom database not the original default database because SparkIT couldn't read&write
-  // data to tables in default database. The main reason is default database location is
+  protected abstract boolean supportsPartition();
+
+  // Use a custom database not the original default database because SparkCommonIT couldn't
+  // read&write data to tables in default database. The main reason is default database location is
   // determined by `hive.metastore.warehouse.dir` in hive-site.xml which is local HDFS address
   // not real HDFS address. The location of tables created under default database is like
   // hdfs://localhost:9000/xxx which couldn't read write data from SparkCommonIT. Will use default
@@ -78,6 +124,13 @@ public abstract class SparkCommonIT extends SparkEnvIT {
     sql("USE " + getDefaultDatabase());
   }
 
+  @AfterAll
+  void cleanUp() {
+    sql("USE " + getCatalogName());
+    getDatabases()
+        .forEach(database -> sql(String.format("DROP DATABASE IF EXISTS %s CASCADE", database)));
+  }
+
   @Test
   void testLoadCatalogs() {
     Set<String> catalogs = getCatalogs();
@@ -88,20 +141,20 @@ public abstract class SparkCommonIT extends SparkEnvIT {
   void testCreateAndLoadSchema() {
     String testDatabaseName = "t_create1";
     dropDatabaseIfExists(testDatabaseName);
-    sql("CREATE DATABASE " + testDatabaseName);
+    sql("CREATE DATABASE " + testDatabaseName + " WITH DBPROPERTIES (ID=001);");
     Map<String, String> databaseMeta = getDatabaseMetadata(testDatabaseName);
     Assertions.assertFalse(databaseMeta.containsKey("Comment"));
     Assertions.assertTrue(databaseMeta.containsKey("Location"));
     Assertions.assertEquals("datastrato", databaseMeta.get("Owner"));
     String properties = databaseMeta.get("Properties");
-    Assertions.assertTrue(StringUtils.isBlank(properties));
+    Assertions.assertTrue(properties.contains("(ID,001)"));
 
     testDatabaseName = "t_create2";
     dropDatabaseIfExists(testDatabaseName);
     String testDatabaseLocation = "/tmp/" + testDatabaseName;
     sql(
         String.format(
-            "CREATE DATABASE %s COMMENT 'comment' LOCATION '%s'\n" + " WITH DBPROPERTIES (ID=001);",
+            "CREATE DATABASE %s COMMENT 'comment' LOCATION '%s'\n" + " WITH DBPROPERTIES (ID=002);",
             testDatabaseName, testDatabaseLocation));
     databaseMeta = getDatabaseMetadata(testDatabaseName);
     String comment = databaseMeta.get("Comment");
@@ -110,18 +163,21 @@ public abstract class SparkCommonIT extends SparkEnvIT {
     // underlying catalog may change /tmp/t_create2 to file:/tmp/t_create2
     Assertions.assertTrue(databaseMeta.get("Location").contains(testDatabaseLocation));
     properties = databaseMeta.get("Properties");
-    Assertions.assertEquals("((ID,001))", properties);
+    Assertions.assertTrue(properties.contains("(ID,002)"));
   }
 
   @Test
   void testAlterSchema() {
     String testDatabaseName = "t_alter";
-    sql("CREATE DATABASE " + testDatabaseName);
+    sql("CREATE DATABASE " + testDatabaseName + " WITH DBPROPERTIES (ID=001);");
     Assertions.assertTrue(
-        StringUtils.isBlank(getDatabaseMetadata(testDatabaseName).get("Properties")));
+        getDatabaseMetadata(testDatabaseName).get("Properties").contains("(ID,001)"));
 
-    sql(String.format("ALTER DATABASE %s SET DBPROPERTIES ('ID'='001')", testDatabaseName));
-    Assertions.assertEquals("((ID,001))", getDatabaseMetadata(testDatabaseName).get("Properties"));
+    sql(String.format("ALTER DATABASE %s SET DBPROPERTIES ('ID'='002')", testDatabaseName));
+    Assertions.assertFalse(
+        getDatabaseMetadata(testDatabaseName).get("Properties").contains("(ID,001)"));
+    Assertions.assertTrue(
+        getDatabaseMetadata(testDatabaseName).get("Properties").contains("(ID,002)"));
 
     // Hive metastore doesn't support alter database location, therefore this test method
     // doesn't verify ALTER DATABASE database_name SET LOCATION 'new_location'.
@@ -326,9 +382,9 @@ public abstract class SparkCommonIT extends SparkEnvIT {
     checkTableColumns(tableName, simpleTableColumns, getTableInfo(tableName));
 
     sql(String.format("ALTER TABLE %S ADD COLUMNS (col1 int)", tableName));
-    sql(String.format("ALTER TABLE %S CHANGE COLUMN col1 col1 string", tableName));
+    sql(String.format("ALTER TABLE %S CHANGE COLUMN col1 col1 bigint", tableName));
     ArrayList<SparkColumnInfo> updateColumns = new ArrayList<>(simpleTableColumns);
-    updateColumns.add(SparkColumnInfo.of("col1", DataTypes.StringType, null));
+    updateColumns.add(SparkColumnInfo.of("col1", DataTypes.LongType, null));
     checkTableColumns(tableName, updateColumns, getTableInfo(tableName));
   }
 
@@ -346,7 +402,7 @@ public abstract class SparkCommonIT extends SparkEnvIT {
     sql(String.format("ALTER TABLE %S ADD COLUMNS (col1 int)", tableName));
     sql(
         String.format(
-            "ALTER TABLE %S RENAME COLUMN %S TO %S", tableName, oldColumnName, newColumnName));
+            "ALTER TABLE %s RENAME COLUMN %s TO %s", tableName, oldColumnName, newColumnName));
     ArrayList<SparkColumnInfo> renameColumns = new ArrayList<>(simpleTableColumns);
     renameColumns.add(SparkColumnInfo.of(newColumnName, DataTypes.IntegerType, null));
     checkTableColumns(tableName, renameColumns, getTableInfo(tableName));
@@ -365,7 +421,7 @@ public abstract class SparkCommonIT extends SparkEnvIT {
 
     sql(
         String.format(
-            "CREATE TABLE %s (id STRING COMMENT '', name STRING COMMENT '', age STRING COMMENT '') USING PARQUET",
+            "CREATE TABLE %s (id STRING COMMENT '', name STRING COMMENT '', age STRING COMMENT '')",
             tableName));
     checkTableColumns(tableName, simpleTableColumns, getTableInfo(tableName));
 
@@ -448,12 +504,13 @@ public abstract class SparkCommonIT extends SparkEnvIT {
   }
 
   @Test
+  @EnabledIf("supportsPartition")
   void testCreateDatasourceFormatPartitionTable() {
     String tableName = "datasource_partition_table";
 
     dropTableIfExists(tableName);
     String createTableSQL = getCreateSimpleTableString(tableName);
-    createTableSQL = createTableSQL + "USING PARQUET PARTITIONED BY (name, age)";
+    createTableSQL = createTableSQL + " USING PARQUET PARTITIONED BY (name, age)";
     sql(createTableSQL);
     SparkTableInfo tableInfo = getTableInfo(tableName);
     SparkTableInfoChecker checker =
@@ -550,6 +607,7 @@ public abstract class SparkCommonIT extends SparkEnvIT {
   }
 
   @Test
+  @EnabledIf("supportsPartition")
   void testInsertDatasourceFormatPartitionTableAsSelect() {
     String tableName = "insert_select_partition_table";
     String newTableName = "new_" + tableName;
@@ -648,6 +706,265 @@ public abstract class SparkCommonIT extends SparkEnvIT {
         .collect(Collectors.joining(","));
   }
 
+  protected void checkTableReadAndUpdate(SparkTableInfo table) {
+    String name = table.getTableIdentifier();
+    checkTableReadWrite(table);
+
+    String updatedValues =
+        table.getColumns().stream()
+            .map(
+                columnInfo ->
+                    String.format(
+                        "%s = %s", columnInfo.getName(), typeNewConstant.get(columnInfo.getType())))
+            .map(Object::toString)
+            .collect(Collectors.joining(","));
+
+    sql(getUpdateTableSql(name, updatedValues, "1 = 1"));
+
+    // do something to match the query result:
+    // 1. remove "'" from values, such as 'a' is trans to a
+    // 2. remove "array" from values, such as array(1, 2, 3) is trans to [1, 2, 3]
+    // 3. remove "map" from values, such as map('a', 1, 'b', 2) is trans to {a=1, b=2}
+    // 4. remove "struct" from values, such as struct(1, 'a') is trans to 1,a
+    String checkValues =
+        table.getColumns().stream()
+            .map(columnInfo -> typeNewConstant.get(columnInfo.getType()))
+            .map(Object::toString)
+            .map(
+                s -> {
+                  String tmp = org.apache.commons.lang3.StringUtils.remove(s, "'");
+                  if (org.apache.commons.lang3.StringUtils.isEmpty(tmp)) {
+                    return tmp;
+                  } else if (tmp.startsWith("array")) {
+                    return tmp.replace("array", "").replace("(", "[").replace(")", "]");
+                  } else if (tmp.startsWith("map")) {
+                    return tmp.replace("map", "")
+                        .replace("(", "{")
+                        .replace(")", "}")
+                        .replace(", ", "=");
+                  } else if (tmp.startsWith("struct")) {
+                    return tmp.replace("struct", "")
+                        .replace("(", "")
+                        .replace(")", "")
+                        .replace(", ", ",");
+                  }
+                  return tmp;
+                })
+            .collect(Collectors.joining(","));
+
+    List<String> queryResult =
+        sql(getSelectAllSql(name)).stream()
+            .map(
+                line ->
+                    Arrays.stream(line)
+                        .map(
+                            item -> {
+                              if (item instanceof Object[]) {
+                                return Arrays.stream((Object[]) item)
+                                    .map(Object::toString)
+                                    .collect(Collectors.joining(","));
+                              } else {
+                                return item.toString();
+                              }
+                            })
+                        .collect(Collectors.joining(",")))
+            .collect(Collectors.toList());
+    Assertions.assertEquals(
+        1, queryResult.size(), "Should just one row, table content: " + queryResult);
+    Assertions.assertEquals(checkValues, queryResult.get(0));
+  }
+
+  protected void checkTableRowLevelUpdate(SparkTableInfo table) {
+    String name = table.getTableIdentifier();
+    checkTableReadWrite(table);
+
+    String sourceTableName = "source_table";
+
+    String selectClause =
+        table.getColumns().stream()
+            .map(
+                columnInfo ->
+                    String.format(
+                        "%s as %s",
+                        typeNewConstant.get(columnInfo.getType()), columnInfo.getName()))
+            .map(Object::toString)
+            .collect(Collectors.joining(","));
+
+    List<SparkColumnInfo> columns = table.getColumns();
+    Preconditions.checkArgument(columns.size() > 0, "columns should not be empty");
+    SparkColumnInfo onColumn = columns.get(0);
+
+    String onClause =
+        String.format(
+            "%s.%s = %s.%s", name, onColumn.getName(), sourceTableName, onColumn.getName());
+
+    sql(getRowLevelUpdateTableSql(name, sourceTableName, selectClause, onClause));
+
+    // do something to match the query result:
+    // 1. remove "'" from values, such as 'a' is trans to a
+    // 2. remove "array" from values, such as array(1, 2, 3) is trans to [1, 2, 3]
+    // 3. remove "map" from values, such as map('a', 1, 'b', 2) is trans to {a=1, b=2}
+    // 4. remove "struct" from values, such as struct(1, 'a') is trans to 1,a
+    String checkValues =
+        table.getColumns().stream()
+            .map(columnInfo -> typeNewConstant.get(columnInfo.getType()))
+            .map(Object::toString)
+            .map(
+                s -> {
+                  String tmp = org.apache.commons.lang3.StringUtils.remove(s, "'");
+                  if (org.apache.commons.lang3.StringUtils.isEmpty(tmp)) {
+                    return tmp;
+                  } else if (tmp.startsWith("array")) {
+                    return tmp.replace("array", "").replace("(", "[").replace(")", "]");
+                  } else if (tmp.startsWith("map")) {
+                    return tmp.replace("map", "")
+                        .replace("(", "{")
+                        .replace(")", "}")
+                        .replace(", ", "=");
+                  } else if (tmp.startsWith("struct")) {
+                    return tmp.replace("struct", "")
+                        .replace("(", "")
+                        .replace(")", "")
+                        .replace(", ", ",");
+                  }
+                  return tmp;
+                })
+            .collect(Collectors.joining(","));
+
+    List<String> queryResult =
+        sql(getSelectAllSql(name)).stream()
+            .map(
+                line ->
+                    Arrays.stream(line)
+                        .map(
+                            item -> {
+                              if (item instanceof Object[]) {
+                                return Arrays.stream((Object[]) item)
+                                    .map(Object::toString)
+                                    .collect(Collectors.joining(","));
+                              } else {
+                                return item.toString();
+                              }
+                            })
+                        .collect(Collectors.joining(",")))
+            .collect(Collectors.toList());
+    Assertions.assertEquals(
+        1, queryResult.size(), "Should just one row, table content: " + queryResult);
+    Assertions.assertEquals(checkValues, queryResult.get(0));
+  }
+
+  protected void checkTableRowLevelDelete(SparkTableInfo table) {
+    String name = table.getTableIdentifier();
+    checkTableReadWrite(table);
+
+    String sourceTableName = "source_table";
+
+    String selectClause =
+        table.getColumns().stream()
+            .map(
+                columnInfo ->
+                    String.format(
+                        "%s as %s",
+                        typeNewConstant.get(columnInfo.getType()), columnInfo.getName()))
+            .map(Object::toString)
+            .collect(Collectors.joining(","));
+
+    List<SparkColumnInfo> columns = table.getColumns();
+    Preconditions.checkArgument(columns.size() > 0, "columns should not be empty");
+    SparkColumnInfo onColumn = columns.get(0);
+
+    String onClause =
+        String.format(
+            "%s.%s = %s.%s", name, onColumn.getName(), sourceTableName, onColumn.getName());
+
+    sql(getRowLevelDeleteTableSql(name, selectClause, sourceTableName, onClause));
+
+    List<Object[]> queryResult = sql(getSelectAllSql(name));
+    Assertions.assertEquals(0, queryResult.size(), "Should no rows, table content: " + queryResult);
+  }
+
+  protected void checkTableRowLevelInsert(SparkTableInfo table) {
+    String name = table.getTableIdentifier();
+    List<Object[]> queryResult = sql(getSelectAllSql(name));
+    Assertions.assertEquals(0, queryResult.size(), "Should no rows, table content: " + queryResult);
+
+    String sourceTableName = "source_table";
+
+    String selectClause =
+        table.getColumns().stream()
+            .map(
+                columnInfo ->
+                    String.format(
+                        "%s as %s",
+                        typeNewConstant.get(columnInfo.getType()), columnInfo.getName()))
+            .map(Object::toString)
+            .collect(Collectors.joining(","));
+
+    List<SparkColumnInfo> columns = table.getColumns();
+    Preconditions.checkArgument(columns.size() > 0, "columns should not be empty");
+    SparkColumnInfo onColumn = columns.get(0);
+
+    String onClause =
+        String.format(
+            "%s.%s = %s.%s", name, onColumn.getName(), sourceTableName, onColumn.getName());
+
+    sql(getRowLevelDeleteTableSql(name, selectClause, sourceTableName, onClause));
+
+    // do something to match the query result:
+    // 1. remove "'" from values, such as 'a' is trans to a
+    // 2. remove "array" from values, such as array(1, 2, 3) is trans to [1, 2, 3]
+    // 3. remove "map" from values, such as map('a', 1, 'b', 2) is trans to {a=1, b=2}
+    // 4. remove "struct" from values, such as struct(1, 'a') is trans to 1,a
+    String checkValues =
+        table.getColumns().stream()
+            .map(columnInfo -> typeNewConstant.get(columnInfo.getType()))
+            .map(Object::toString)
+            .map(
+                s -> {
+                  String tmp = org.apache.commons.lang3.StringUtils.remove(s, "'");
+                  if (org.apache.commons.lang3.StringUtils.isEmpty(tmp)) {
+                    return tmp;
+                  } else if (tmp.startsWith("array")) {
+                    return tmp.replace("array", "").replace("(", "[").replace(")", "]");
+                  } else if (tmp.startsWith("map")) {
+                    return tmp.replace("map", "")
+                        .replace("(", "{")
+                        .replace(")", "}")
+                        .replace(", ", "=");
+                  } else if (tmp.startsWith("struct")) {
+                    return tmp.replace("struct", "")
+                        .replace("(", "")
+                        .replace(")", "")
+                        .replace(", ", ",");
+                  }
+                  return tmp;
+                })
+            .collect(Collectors.joining(","));
+
+    List<String> queryResultWithInsert =
+        sql(getSelectAllSql(name)).stream()
+            .map(
+                line ->
+                    Arrays.stream(line)
+                        .map(
+                            item -> {
+                              if (item instanceof Object[]) {
+                                return Arrays.stream((Object[]) item)
+                                    .map(Object::toString)
+                                    .collect(Collectors.joining(","));
+                              } else {
+                                return item.toString();
+                              }
+                            })
+                        .collect(Collectors.joining(",")))
+            .collect(Collectors.toList());
+    Assertions.assertEquals(
+        1,
+        queryResultWithInsert.size(),
+        "Should just one row, table content: " + queryResultWithInsert);
+    Assertions.assertEquals(checkValues, queryResultWithInsert.get(0));
+  }
+
   protected String getCreateSimpleTableString(String tableName) {
     return String.format(
         "CREATE TABLE %s (id INT COMMENT 'id comment', name STRING COMMENT '', age INT)",
@@ -672,7 +989,7 @@ public abstract class SparkCommonIT extends SparkEnvIT {
     sql(createTableSql);
   }
 
-  private void checkTableColumns(
+  protected void checkTableColumns(
       String tableName, List<SparkColumnInfo> columns, SparkTableInfo tableInfo) {
     SparkTableInfoChecker.create()
         .withName(tableName)
