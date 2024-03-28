@@ -6,6 +6,8 @@ package com.datastrato.gravitino.catalog;
 
 import static com.datastrato.gravitino.Entity.EntityType.SCHEMA;
 import static com.datastrato.gravitino.Entity.EntityType.TABLE;
+import static com.datastrato.gravitino.Entity.EntityType.TOPIC;
+import static com.datastrato.gravitino.StringIdentifier.fromProperties;
 import static com.datastrato.gravitino.catalog.PropertiesMetadataHelpers.validatePropertyForAlter;
 import static com.datastrato.gravitino.catalog.PropertiesMetadataHelpers.validatePropertyForCreate;
 import static com.datastrato.gravitino.rel.expressions.transforms.Transforms.EMPTY_TRANSFORM;
@@ -25,16 +27,23 @@ import com.datastrato.gravitino.exceptions.NoSuchEntityException;
 import com.datastrato.gravitino.exceptions.NoSuchFilesetException;
 import com.datastrato.gravitino.exceptions.NoSuchSchemaException;
 import com.datastrato.gravitino.exceptions.NoSuchTableException;
+import com.datastrato.gravitino.exceptions.NoSuchTopicException;
 import com.datastrato.gravitino.exceptions.NonEmptyEntityException;
 import com.datastrato.gravitino.exceptions.NonEmptySchemaException;
 import com.datastrato.gravitino.exceptions.SchemaAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.TableAlreadyExistsException;
+import com.datastrato.gravitino.exceptions.TopicAlreadyExistsException;
 import com.datastrato.gravitino.file.Fileset;
 import com.datastrato.gravitino.file.FilesetCatalog;
 import com.datastrato.gravitino.file.FilesetChange;
+import com.datastrato.gravitino.messaging.DataLayout;
+import com.datastrato.gravitino.messaging.Topic;
+import com.datastrato.gravitino.messaging.TopicCatalog;
+import com.datastrato.gravitino.messaging.TopicChange;
 import com.datastrato.gravitino.meta.AuditInfo;
 import com.datastrato.gravitino.meta.SchemaEntity;
 import com.datastrato.gravitino.meta.TableEntity;
+import com.datastrato.gravitino.meta.TopicEntity;
 import com.datastrato.gravitino.rel.Column;
 import com.datastrato.gravitino.rel.Schema;
 import com.datastrato.gravitino.rel.SchemaChange;
@@ -68,7 +77,8 @@ import org.slf4j.LoggerFactory;
  * A catalog operation dispatcher that dispatches the catalog operations to the underlying catalog
  * implementation.
  */
-public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog, SupportsSchemas {
+public class CatalogOperationDispatcher
+    implements TableCatalog, FilesetCatalog, TopicCatalog, SupportsSchemas {
 
   private static final Logger LOG = LoggerFactory.getLogger(CatalogOperationDispatcher.class);
 
@@ -741,6 +751,185 @@ public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog,
         NonEmptyEntityException.class);
   }
 
+  @Override
+  public NameIdentifier[] listTopics(Namespace namespace) throws NoSuchSchemaException {
+    return doWithCatalog(
+        getCatalogIdentifier(NameIdentifier.of(namespace.levels())),
+        c -> c.doWithTopicOps(t -> t.listTopics(namespace)),
+        NoSuchSchemaException.class);
+  }
+
+  @Override
+  public Topic loadTopic(NameIdentifier ident) throws NoSuchTopicException {
+    NameIdentifier catalogIdent = getCatalogIdentifier(ident);
+    Topic topic =
+        doWithCatalog(
+            catalogIdent,
+            c -> c.doWithTopicOps(t -> t.loadTopic(ident)),
+            NoSuchTopicException.class);
+
+    StringIdentifier stringId = getStringIdFromProperties(topic.properties());
+    // Case 1: The topic is not created by Gravitino.
+    // Note: for Kafka catalog, stringId will not be null. Because there is no way to store the
+    // Gravitino
+    // ID in Kafka, therefor we use the topic ID as the Gravitino ID
+    if (stringId == null) {
+      return EntityCombinedTopic.of(topic)
+          .withHiddenPropertiesSet(
+              getHiddenPropertyNames(
+                  catalogIdent, HasPropertyMetadata::topicPropertiesMetadata, topic.properties()));
+    }
+
+    TopicEntity topicEntity =
+        operateOnEntity(
+            ident,
+            identifier -> store.get(identifier, TOPIC, TopicEntity.class),
+            "GET",
+            getStringIdFromProperties(topic.properties()).id());
+
+    return EntityCombinedTopic.of(topic, topicEntity)
+        .withHiddenPropertiesSet(
+            getHiddenPropertyNames(
+                catalogIdent, HasPropertyMetadata::topicPropertiesMetadata, topic.properties()));
+  }
+
+  @Override
+  public Topic createTopic(
+      NameIdentifier ident, String comment, DataLayout dataLayout, Map<String, String> properties)
+      throws NoSuchSchemaException, TopicAlreadyExistsException {
+    NameIdentifier catalogIdent = getCatalogIdentifier(ident);
+    doWithCatalog(
+        catalogIdent,
+        c ->
+            c.doWithPropertiesMeta(
+                p -> {
+                  validatePropertyForCreate(p.topicPropertiesMetadata(), properties);
+                  return null;
+                }),
+        IllegalArgumentException.class);
+    Long uid = idGenerator.nextId();
+    StringIdentifier stringId = StringIdentifier.fromId(uid);
+    Map<String, String> updatedProperties =
+        StringIdentifier.newPropertiesWithId(stringId, properties);
+
+    doWithCatalog(
+        catalogIdent,
+        c -> c.doWithTopicOps(t -> t.createTopic(ident, comment, dataLayout, updatedProperties)),
+        NoSuchSchemaException.class,
+        TopicAlreadyExistsException.class);
+
+    // Retrieve the Topic again to obtain some values generated by underlying catalog
+    Topic topic =
+        doWithCatalog(
+            catalogIdent,
+            c -> c.doWithTopicOps(t -> t.loadTopic(ident)),
+            NoSuchTopicException.class);
+
+    TopicEntity topicEntity =
+        TopicEntity.builder()
+            .withId(fromProperties(topic.properties()).id())
+            .withName(ident.name())
+            .withNamespace(ident.namespace())
+            .withAuditInfo(
+                AuditInfo.builder()
+                    .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
+                    .withCreateTime(Instant.now())
+                    .build())
+            .build();
+
+    try {
+      store.put(topicEntity, true /* overwrite */);
+    } catch (Exception e) {
+      LOG.error(FormattedErrorMessages.STORE_OP_FAILURE, "put", ident, e);
+      return EntityCombinedTopic.of(topic)
+          .withHiddenPropertiesSet(
+              getHiddenPropertyNames(
+                  catalogIdent, HasPropertyMetadata::topicPropertiesMetadata, topic.properties()));
+    }
+
+    return EntityCombinedTopic.of(topic, topicEntity)
+        .withHiddenPropertiesSet(
+            getHiddenPropertyNames(
+                catalogIdent, HasPropertyMetadata::topicPropertiesMetadata, topic.properties()));
+  }
+
+  @Override
+  public Topic alterTopic(NameIdentifier ident, TopicChange... changes)
+      throws NoSuchTopicException, IllegalArgumentException {
+    validateAlterProperties(ident, HasPropertyMetadata::topicPropertiesMetadata, changes);
+
+    NameIdentifier catalogIdent = getCatalogIdentifier(ident);
+    Topic tempAlteredTable =
+        doWithCatalog(
+            catalogIdent,
+            c -> c.doWithTopicOps(t -> t.alterTopic(ident, changes)),
+            NoSuchTopicException.class,
+            IllegalArgumentException.class);
+
+    // Retrieve the Topic again to obtain some values generated by underlying catalog
+    Topic alteredTopic =
+        doWithCatalog(
+            catalogIdent,
+            c ->
+                c.doWithTopicOps(
+                    t ->
+                        t.loadTopic(NameIdentifier.of(ident.namespace(), tempAlteredTable.name()))),
+            NoSuchTopicException.class);
+
+    TopicEntity updatedTopicEntity =
+        operateOnEntity(
+            ident,
+            id ->
+                store.update(
+                    id,
+                    TopicEntity.class,
+                    TOPIC,
+                    topicEntity ->
+                        TopicEntity.builder()
+                            .withId(topicEntity.id())
+                            .withName(topicEntity.name())
+                            .withNamespace(ident.namespace())
+                            .withAuditInfo(
+                                AuditInfo.builder()
+                                    .withCreator(topicEntity.auditInfo().creator())
+                                    .withCreateTime(topicEntity.auditInfo().createTime())
+                                    .withLastModifier(
+                                        PrincipalUtils.getCurrentPrincipal().getName())
+                                    .withLastModifiedTime(Instant.now())
+                                    .build())
+                            .build()),
+            "UPDATE",
+            getStringIdFromProperties(alteredTopic.properties()).id());
+
+    return EntityCombinedTopic.of(alteredTopic, updatedTopicEntity)
+        .withHiddenPropertiesSet(
+            getHiddenPropertyNames(
+                catalogIdent,
+                HasPropertyMetadata::topicPropertiesMetadata,
+                alteredTopic.properties()));
+  }
+
+  @Override
+  public boolean dropTopic(NameIdentifier ident) throws NoSuchTopicException {
+    boolean dropped =
+        doWithCatalog(
+            getCatalogIdentifier(ident),
+            c -> c.doWithTopicOps(t -> t.dropTopic(ident)),
+            NoSuchTopicException.class);
+
+    if (!dropped) {
+      return false;
+    }
+
+    try {
+      store.delete(ident, TOPIC);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+
+    return true;
+  }
+
   private <R, E extends Throwable> R doWithCatalog(
       NameIdentifier ident, ThrowableFunction<CatalogManager.CatalogWrapper, R> fn, Class<E> ex)
       throws E {
@@ -824,6 +1013,9 @@ public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog,
       } else if (item instanceof FilesetChange.SetProperty) {
         FilesetChange.SetProperty setProperty = (FilesetChange.SetProperty) item;
         properties.put(setProperty.getProperty(), setProperty.getValue());
+      } else if (item instanceof TopicChange.SetProperty) {
+        TopicChange.SetProperty setProperty = (TopicChange.SetProperty) item;
+        properties.put(setProperty.getProperty(), setProperty.getValue());
       }
     }
 
@@ -842,6 +1034,9 @@ public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog,
       } else if (item instanceof FilesetChange.RemoveProperty) {
         FilesetChange.RemoveProperty removeProperty = (FilesetChange.RemoveProperty) item;
         properties.put(removeProperty.getProperty(), removeProperty.getProperty());
+      } else if (item instanceof TopicChange.RemoveProperty) {
+        TopicChange.RemoveProperty removeProperty = (TopicChange.RemoveProperty) item;
+        properties.put(removeProperty.getProperty(), removeProperty.getProperty());
       }
     }
 
@@ -850,7 +1045,7 @@ public class CatalogOperationDispatcher implements TableCatalog, FilesetCatalog,
 
   private StringIdentifier getStringIdFromProperties(Map<String, String> properties) {
     try {
-      StringIdentifier stringId = StringIdentifier.fromProperties(properties);
+      StringIdentifier stringId = fromProperties(properties);
       if (stringId == null) {
         LOG.warn(FormattedErrorMessages.STRING_ID_NOT_FOUND);
       }
