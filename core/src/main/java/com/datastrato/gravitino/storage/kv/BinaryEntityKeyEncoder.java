@@ -9,6 +9,7 @@ import static com.datastrato.gravitino.Entity.EntityType.FILESET;
 import static com.datastrato.gravitino.Entity.EntityType.METALAKE;
 import static com.datastrato.gravitino.Entity.EntityType.SCHEMA;
 import static com.datastrato.gravitino.Entity.EntityType.TABLE;
+import static com.datastrato.gravitino.Entity.EntityType.TOPIC;
 
 import com.datastrato.gravitino.Entity.EntityType;
 import com.datastrato.gravitino.NameIdentifier;
@@ -70,7 +71,8 @@ public class BinaryEntityKeyEncoder implements EntityKeyEncoder<byte[]> {
           CATALOG, new String[] {CATALOG.getShortName() + "/", "/"},
           SCHEMA, new String[] {SCHEMA.getShortName() + "/", "/", "/"},
           TABLE, new String[] {TABLE.getShortName() + "/", "/", "/", "/"},
-          FILESET, new String[] {FILESET.getShortName() + "/", "/", "/", "/"});
+          FILESET, new String[] {FILESET.getShortName() + "/", "/", "/", "/"},
+          TOPIC, new String[] {TOPIC.getShortName() + "/", "/", "/", "/"});
 
   @VisibleForTesting final NameMappingService nameMappingService;
 
