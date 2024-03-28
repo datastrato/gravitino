@@ -9,6 +9,7 @@ import com.datastrato.gravitino.integration.test.util.spark.SparkTableInfo.Spark
 import com.datastrato.gravitino.spark.connector.SparkTransformConverter;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.iceberg.spark.source.SparkMetadataColumn;
 import org.apache.spark.sql.connector.expressions.Expressions;
 import org.apache.spark.sql.connector.expressions.IdentityTransform;
 import org.apache.spark.sql.connector.expressions.Transform;

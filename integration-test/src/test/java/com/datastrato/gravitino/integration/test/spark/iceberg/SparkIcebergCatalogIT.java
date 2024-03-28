@@ -5,7 +5,6 @@
 package com.datastrato.gravitino.integration.test.spark.iceberg;
 
 import com.datastrato.gravitino.integration.test.spark.SparkCommonIT;
-import com.datastrato.gravitino.integration.test.util.spark.SparkMetadataColumn;
 import com.datastrato.gravitino.integration.test.util.spark.SparkTableInfo;
 import com.datastrato.gravitino.integration.test.util.spark.SparkTableInfoChecker;
 import java.io.File;
@@ -13,6 +12,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.fs.Path;
+import org.apache.iceberg.spark.source.SparkMetadataColumn;
 import org.apache.spark.sql.types.DataTypes;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Tag;
