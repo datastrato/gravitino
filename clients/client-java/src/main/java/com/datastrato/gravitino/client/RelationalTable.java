@@ -12,6 +12,7 @@ import com.datastrato.gravitino.Namespace;
 import com.datastrato.gravitino.dto.rel.TableDTO;
 import com.datastrato.gravitino.dto.rel.partitions.PartitionDTO;
 import com.datastrato.gravitino.dto.requests.AddPartitionsRequest;
+import com.datastrato.gravitino.dto.responses.DropResponse;
 import com.datastrato.gravitino.dto.responses.PartitionListResponse;
 import com.datastrato.gravitino.dto.responses.PartitionNameListResponse;
 import com.datastrato.gravitino.dto.responses.PartitionResponse;
@@ -32,9 +33,12 @@ import java.util.HashMap;
 import java.util.Map;
 import javax.annotation.Nullable;
 import lombok.SneakyThrows;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Represents a relational table. */
 public class RelationalTable implements Table, SupportsPartitions {
+  private static final Logger LOG = LoggerFactory.getLogger(RelationalTable.class);
 
   /**
    * Creates a new RelationalTable.
@@ -220,12 +224,20 @@ public class RelationalTable implements Table, SupportsPartitions {
   /**
    * Drops the partition with the given name.
    *
-   * @param partitionName The identifier of the partition.
+   * @param partitionName The name of the partition.
    * @return true if the partition is dropped, false otherwise.
    */
   @Override
-  public boolean dropPartition(String partitionName) {
-    throw new UnsupportedOperationException();
+  public boolean dropPartition(String partitionName, boolean ifExists)
+      throws NoSuchPartitionException {
+    DropResponse resp =
+        restClient.delete(
+            formatPartitionRequestPath(getPartitionRequestPath(), partitionName),
+            DropResponse.class,
+            Collections.emptyMap(),
+            ErrorHandlers.partitionErrorHandler());
+    resp.validate();
+    return resp.dropped();
   }
 
   /**
