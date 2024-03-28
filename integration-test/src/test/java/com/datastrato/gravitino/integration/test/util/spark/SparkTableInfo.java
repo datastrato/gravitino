@@ -17,10 +17,15 @@ import java.util.stream.Collectors;
 import javax.ws.rs.NotSupportedException;
 import lombok.Data;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.spark.sql.connector.expressions.ApplyTransform;
 import org.apache.spark.sql.connector.expressions.BucketTransform;
+import org.apache.spark.sql.connector.expressions.DaysTransform;
+import org.apache.spark.sql.connector.expressions.HoursTransform;
 import org.apache.spark.sql.connector.expressions.IdentityTransform;
+import org.apache.spark.sql.connector.expressions.MonthsTransform;
 import org.apache.spark.sql.connector.expressions.SortedBucketTransform;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.connector.expressions.YearsTransform;
 import org.apache.spark.sql.types.DataType;
 import org.junit.jupiter.api.Assertions;
 
@@ -34,6 +39,11 @@ public class SparkTableInfo {
   private Map<String, String> tableProperties;
   private List<String> unknownItems = new ArrayList<>();
   private Transform bucket;
+  private Transform hour;
+  private Transform day;
+  private Transform month;
+  private Transform year;
+  private Transform truncate;
   private List<Transform> partitions = new ArrayList<>();
   private Set<String> partitionColumnNames = new HashSet<>();
 
@@ -63,6 +73,31 @@ public class SparkTableInfo {
   void setBucket(Transform bucket) {
     Assertions.assertNull(this.bucket, "Should only one distribution");
     this.bucket = bucket;
+  }
+
+  void setHour(Transform hour) {
+    Assertions.assertNull(this.hour, "Should only one distribution");
+    this.hour = hour;
+  }
+
+  void setDay(Transform day) {
+    Assertions.assertNull(this.day, "Should only one distribution");
+    this.day = day;
+  }
+
+  void setMonth(Transform month) {
+    Assertions.assertNull(this.month, "Should only one distribution");
+    this.month = month;
+  }
+
+  void setYear(Transform year) {
+    Assertions.assertNull(this.year, "Should only one distribution");
+    this.year = year;
+  }
+
+  void setTruncate(Transform truncate) {
+    Assertions.assertNull(this.truncate, "Should only one distribution");
+    this.truncate = truncate;
   }
 
   void addPartition(Transform partition) {
@@ -102,6 +137,17 @@ public class SparkTableInfo {
                 sparkTableInfo.setBucket(transform);
               } else if (transform instanceof IdentityTransform) {
                 sparkTableInfo.addPartition(transform);
+              } else if (transform instanceof HoursTransform) {
+                sparkTableInfo.setHour(transform);
+              } else if (transform instanceof DaysTransform) {
+                sparkTableInfo.setDay(transform);
+              } else if (transform instanceof MonthsTransform) {
+                sparkTableInfo.setMonth(transform);
+              } else if (transform instanceof YearsTransform) {
+                sparkTableInfo.setYear(transform);
+              } else if (transform instanceof ApplyTransform
+                  && "truncate".equals(transform.name())) {
+                sparkTableInfo.setTruncate(transform);
               } else {
                 throw new NotSupportedException(
                     "Doesn't support Spark transform: " + transform.name());
