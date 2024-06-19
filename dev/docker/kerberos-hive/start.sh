@@ -57,6 +57,7 @@ echo -e "${PASS}\n" | kinit hive/${HOSTNAME}
 sed -i "s/mockhost/${HOSTNAME}/g" ${HADOOP_CONF_DIR}/hdfs-site.xml
 sed -i "s/mockhost/${HOSTNAME}/g" ${HADOOP_CONF_DIR}/core-site.xml
 sed -i "s/mockhost/${HOSTNAME}/g" ${HIVE_HOME}/conf/hive-site.xml
+sed -i "s/mockhost/${HOSTNAME}/g" ${HIVE_HOME}/conf1/hive-site.xml
 
 # format HDFS
 ${HADOOP_HOME}/bin/hdfs namenode -format -nonInteractive
@@ -117,6 +118,10 @@ echo """
 # start hive
 ${HIVE_HOME}/bin/schematool -initSchema -dbType mysql
 ${HIVE_HOME}/bin/hive --service hiveserver2 > /dev/null 2>&1 &
+${HIVE_HOME}/bin/hive --service metastore > /dev/null 2>&1 &
+
+# Start another metastore
+export HIVE_CONF_DIR=${HIVE_HOME}/conf1
 ${HIVE_HOME}/bin/hive --service metastore > /dev/null 2>&1 &
 
 # persist the container
