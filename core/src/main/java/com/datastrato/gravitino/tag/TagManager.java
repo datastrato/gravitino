@@ -37,7 +37,7 @@ public class TagManager {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 
-  public Tag getTag(String metalake, String name) throws NoSuchTagException {
+  public Tag getTag(String metalake, String name, boolean extended) throws NoSuchTagException {
     throw new UnsupportedOperationException("Not implemented yet");
   }
 

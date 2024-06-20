@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public class TagEntity implements Tag, Entity, Auditable, HasIdentifier {
+public class TagEntity implements Tag, Tag.AssociatedObjects, Entity, Auditable, HasIdentifier {
 
   public static final Field ID =
       Field.required("id", Long.class, "The unique id of the tag entity.");
@@ -98,6 +98,7 @@ public class TagEntity implements Tag, Entity, Auditable, HasIdentifier {
     return Optional.empty();
   }
 
+  @Override
   public MetadataObject[] objects() {
     return objects;
   }
@@ -105,6 +106,11 @@ public class TagEntity implements Tag, Entity, Auditable, HasIdentifier {
   @Override
   public Audit auditInfo() {
     return auditInfo;
+  }
+
+  @Override
+  public AssociatedObjects associatedObjects() {
+    return this;
   }
 
   @Override
