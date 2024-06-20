@@ -25,7 +25,9 @@ import com.datastrato.gravitino.storage.relational.mapper.TableMetaMapper;
 import com.datastrato.gravitino.storage.relational.mapper.TopicMetaMapper;
 import com.datastrato.gravitino.storage.relational.mapper.UserMetaMapper;
 import com.datastrato.gravitino.storage.relational.mapper.UserRoleRelMapper;
+import com.datastrato.gravitino.storage.relational.po.CatalogPO;
 import com.datastrato.gravitino.storage.relational.po.MetalakePO;
+import com.datastrato.gravitino.storage.relational.po.SchemaPO;
 import com.datastrato.gravitino.storage.relational.utils.ExceptionUtils;
 import com.datastrato.gravitino.storage.relational.utils.POConverters;
 import com.datastrato.gravitino.storage.relational.utils.SessionUtils;
@@ -94,16 +96,66 @@ public class MetalakeMetaService {
   public void insertMetalake(BaseMetalake baseMetalake, boolean overwrite) {
     try {
       NameIdentifierUtil.checkMetalake(baseMetalake.nameIdentifier());
-      SessionUtils.doWithCommit(
-          MetalakeMetaMapper.class,
-          mapper -> {
-            MetalakePO po = POConverters.initializeMetalakePOWithVersion(baseMetalake);
-            if (overwrite) {
-              mapper.insertMetalakeMetaOnDuplicateKeyUpdate(po);
-            } else {
-              mapper.insertMetalakeMeta(po);
-            }
-          });
+
+      CatalogPO systemCatalogPO = POConverters.initializeSystemCatalogPO(baseMetalake.id());
+      SchemaPO userSchemaPO =
+          POConverters.initializeUserSchemaPO(baseMetalake.id(), systemCatalogPO.getCatalogId());
+      SchemaPO groupSchemaPO =
+          POConverters.initializeGroupSchemaPO(baseMetalake.id(), systemCatalogPO.getCatalogId());
+      SchemaPO roleSchemaPO =
+          POConverters.initializeRoleSchemaPO(baseMetalake.id(), systemCatalogPO.getCatalogId());
+      SessionUtils.doMultipleWithCommit(
+          () ->
+              SessionUtils.doWithoutCommit(
+                  MetalakeMetaMapper.class,
+                  mapper -> {
+                    MetalakePO po = POConverters.initializeMetalakePOWithVersion(baseMetalake);
+                    if (overwrite) {
+                      mapper.insertMetalakeMetaOnDuplicateKeyUpdate(po);
+                    } else {
+                      mapper.insertMetalakeMeta(po);
+                    }
+                  }),
+          () ->
+              SessionUtils.doWithoutCommit(
+                  CatalogMetaMapper.class,
+                  mapper -> {
+                    if (overwrite) {
+                      mapper.insertCatalogMetaOnDuplicateKeyUpdate(systemCatalogPO);
+                    } else {
+                      mapper.insertCatalogMeta(systemCatalogPO);
+                    }
+                  }),
+          () ->
+              SessionUtils.doWithoutCommit(
+                  SchemaMetaMapper.class,
+                  mapper -> {
+                    if (overwrite) {
+                      mapper.insertSchemaMetaOnDuplicateKeyUpdate(userSchemaPO);
+                    } else {
+                      mapper.insertSchemaMeta(userSchemaPO);
+                    }
+                  }),
+          () ->
+              SessionUtils.doWithoutCommit(
+                  SchemaMetaMapper.class,
+                  mapper -> {
+                    if (overwrite) {
+                      mapper.insertSchemaMetaOnDuplicateKeyUpdate(groupSchemaPO);
+                    } else {
+                      mapper.insertSchemaMeta(groupSchemaPO);
+                    }
+                  }),
+          () ->
+              SessionUtils.doWithoutCommit(
+                  SchemaMetaMapper.class,
+                  mapper -> {
+                    if (overwrite) {
+                      mapper.insertSchemaMetaOnDuplicateKeyUpdate(roleSchemaPO);
+                    } else {
+                      mapper.insertSchemaMeta(roleSchemaPO);
+                    }
+                  }));
     } catch (RuntimeException re) {
       ExceptionUtils.checkSQLException(
           re, Entity.EntityType.METALAKE, baseMetalake.nameIdentifier().toString());
@@ -218,6 +270,13 @@ public class MetalakeMetaService {
           throw new NonEmptyEntityException(
               "Entity %s has sub-entities, you should remove sub-entities first", ident);
         }
+
+        Long systemCatalogId =
+            SessionUtils.getWithoutCommit(
+                CatalogMetaMapper.class,
+                mapper ->
+                    mapper.selectCatalogIdByMetalakeIdAndName(
+                        metalakeId, Entity.SYSTEM_CATALOG_RESERVED_NAME));
         SessionUtils.doMultipleWithCommit(
             () ->
                 SessionUtils.doWithoutCommit(
@@ -246,7 +305,57 @@ public class MetalakeMetaService {
             () ->
                 SessionUtils.doWithoutCommit(
                     SecurableObjectMapper.class,
-                    mapper -> mapper.softDeleteRoleMetasByMetalakeId(metalakeId)));
+                    mapper -> mapper.softDeleteRoleMetasByMetalakeId(metalakeId)),
+            () ->
+                SessionUtils.doWithoutCommit(
+                    CatalogMetaMapper.class,
+                    mapper -> {
+                      if (systemCatalogId != null) {
+                        mapper.softDeleteCatalogMetasByCatalogId(systemCatalogId);
+                      }
+                    }),
+            () ->
+                SessionUtils.doWithoutCommit(
+                    SchemaMetaMapper.class,
+                    mapper -> {
+                      if (systemCatalogId == null) {
+                        return;
+                      }
+                      Long userSchemaId =
+                          mapper.selectSchemaIdByCatalogIdAndName(
+                              systemCatalogId, Entity.USER_SCHEMA_NAME);
+                      if (userSchemaId != null) {
+                        mapper.softDeleteSchemaMetasBySchemaId(userSchemaId);
+                      }
+                    }),
+            () ->
+                SessionUtils.doWithoutCommit(
+                    SchemaMetaMapper.class,
+                    mapper -> {
+                      if (systemCatalogId == null) {
+                        return;
+                      }
+                      Long groupSchemaId =
+                          mapper.selectSchemaIdByCatalogIdAndName(
+                              systemCatalogId, Entity.GROUP_SCHEMA_NAME);
+                      if (groupSchemaId != null) {
+                        mapper.softDeleteSchemaMetasBySchemaId(groupSchemaId);
+                      }
+                    }),
+            () ->
+                SessionUtils.doWithoutCommit(
+                    SchemaMetaMapper.class,
+                    mapper -> {
+                      if (systemCatalogId == null) {
+                        return;
+                      }
+                      Long roleSchemaId =
+                          mapper.selectSchemaIdByCatalogIdAndName(
+                              systemCatalogId, Entity.ROLE_SCHEMA_NAME);
+                      if (roleSchemaId != null) {
+                        mapper.softDeleteSchemaMetasBySchemaId(roleSchemaId);
+                      }
+                    }));
       }
     }
     return true;
