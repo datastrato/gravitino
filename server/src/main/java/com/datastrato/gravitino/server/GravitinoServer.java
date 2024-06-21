@@ -24,11 +24,10 @@ import com.datastrato.gravitino.server.web.ObjectMapperProvider;
 import com.datastrato.gravitino.server.web.VersioningFilter;
 import com.datastrato.gravitino.server.web.filter.AccessControlNotAllowedFilter;
 import com.datastrato.gravitino.server.web.ui.WebUIFilter;
+import com.datastrato.gravitino.tag.TagManager;
 import java.io.File;
 import java.util.Properties;
 import javax.servlet.Servlet;
-
-import com.datastrato.gravitino.tag.TagManager;
 import org.glassfish.hk2.utilities.binding.AbstractBinder;
 import org.glassfish.jersey.jackson.JacksonFeature;
 import org.glassfish.jersey.server.ResourceConfig;
