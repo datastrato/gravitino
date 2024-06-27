@@ -11,8 +11,8 @@ import javax.annotation.Nullable;
 import lombok.Getter;
 
 /**
- * A group of test sql files in same directory which belongs to one catalog and may contain
- * prepare.sql or cleanup.sql
+ * A group of test SQL files in same directory which belongs to one catalog and may contain
+ * prepare.sql to init or cleanup.sql to clean.
  */
 @Getter
 public class TestCaseGroup {

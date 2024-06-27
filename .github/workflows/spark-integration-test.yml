@@ -93,7 +93,7 @@ jobs:
       - name: Spark Integration Test
         id: integrationTest
         run: |
-          # There are some odd problems when running Spark integration test and Spark SQL test in one gradle command, so split to run separately.
+          # There are some odd problems when running Spark integration test and Spark SQL regression test in one gradle command, so split to run separately.
           if [ "${{ matrix.scala-version }}" == "2.12" ];then 
              ./gradlew -PskipTests -PtestMode=${{ matrix.test-mode }} -PjdkVersion=${{ matrix.java-version }} -PscalaVersion=${{ matrix.scala-version }} :spark-connector:spark-3.3:test --tests "com.datastrato.gravitino.spark.connector.integration.test.**" -PskipSparkSQLITs
              ./gradlew -PskipTests -PtestMode=${{ matrix.test-mode }} -PjdkVersion=${{ matrix.java-version }} -PscalaVersion=${{ matrix.scala-version }} :spark-connector:spark-3.3:test --tests "com.datastrato.gravitino.spark.connector.integration.test.sql.**"

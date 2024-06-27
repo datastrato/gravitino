@@ -23,14 +23,44 @@ import org.junit.jupiter.api.TestInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * The entrypoint to run SparkSQL regression test, you could run it like: ./gradlew
+ * :spark-connector:spark-3.4:test --tests
+ * "com.datastrato.gravitino.spark.connector.integration.test.sql.SparkSQLRegressionTest" or specify
+ * a config file explicitly: ./gradlew :spark-connector:spark-3.4:test --tests
+ * "com.datastrato.gravitino.spark.connector.integration.test.sql.SparkSQLRegressionTest"
+ * -PconfigFile=/xxx/xx
+ */
 @Tag("gravitino-docker-it")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class SparkSQLRegressionTest {
-
-  public static final Logger LOG = LoggerFactory.getLogger(SparkSQLRegressionTest.class);
+  private static final Logger LOG = LoggerFactory.getLogger(SparkSQLRegressionTest.class);
   private static final String SPARK_TEST_CONFIG_FILE = "configFile";
   private SparkQueryRunner sparkQueryRunner;
   private SparkTestConfig sparkTestConfig;
+
+  @Test
+  public void run() throws IOException {
+    String baseDir = sparkTestConfig.getBaseDir();
+    List<String> testSQLs = sparkTestConfig.getTestSQLs();
+    List<TestCaseGroup> sqlTestCaseGroups =
+        findSQLTests(Paths.get(baseDir), Paths.get(baseDir), testSQLs, CatalogType.UNKNOWN);
+    runSQLTests(sqlTestCaseGroups);
+  }
+
+  @BeforeAll
+  void init() throws IOException {
+    String configFile = System.getProperty(SPARK_TEST_CONFIG_FILE);
+    this.sparkTestConfig = loadSparkTestConfig(configFile);
+    this.sparkQueryRunner = new SparkQueryRunner(sparkTestConfig);
+  }
+
+  @AfterAll
+  void close() throws Exception {
+    if (sparkQueryRunner != null) {
+      sparkQueryRunner.close();
+    }
+  }
 
   private List<TestCaseGroup> findSQLTests(
       Path basePath, Path path, List<String> testSQLs, CatalogType parentCatalogType)
@@ -92,29 +122,6 @@ public abstract class SparkSQLRegressionTest {
         });
   }
 
-  @Test
-  public void run() throws IOException {
-    String baseDir = sparkTestConfig.getBaseDir();
-    List<String> testSQLs = sparkTestConfig.getTestSQLs();
-    List<TestCaseGroup> sqlTestCaseGroups =
-        findSQLTests(Paths.get(baseDir), Paths.get(baseDir), testSQLs, CatalogType.UNKNOWN);
-    runSQLTests(sqlTestCaseGroups);
-  }
-
-  @BeforeAll
-  void init() throws IOException {
-    String configFile = System.getProperty(SPARK_TEST_CONFIG_FILE);
-    this.sparkTestConfig = loadSparkTestConfig(configFile);
-    this.sparkQueryRunner = new SparkQueryRunner(sparkTestConfig);
-  }
-
-  @AfterAll
-  void close() throws Exception {
-    if (sparkQueryRunner != null) {
-      sparkQueryRunner.close();
-    }
-  }
-
   private SparkTestConfig loadSparkTestConfig(String configFile) throws IOException {
     if (Strings.isBlank(configFile)) {
       String projectDir = System.getenv("GRAVITINO_ROOT_DIR");
@@ -129,7 +136,6 @@ public abstract class SparkSQLRegressionTest {
                   "spark-test.conf")
               .toString();
     }
-
     LOG.info("config file: {}", configFile);
 
     SparkTestConfig testConfig = new SparkTestConfig();

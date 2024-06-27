@@ -15,7 +15,7 @@ import java.util.List;
 import org.junit.platform.commons.util.StringUtils;
 
 public class SparkTestConfig extends Config {
-  private static String DEFAULT_BASE_DIR =
+  private static final String DEFAULT_BASE_DIR =
       Paths.get(
               System.getenv("GRAVITINO_ROOT_DIR"),
               "spark-connector",
@@ -40,26 +40,20 @@ public class SparkTestConfig extends Config {
           .stringConf()
           .create();
 
-  private static final ConfigEntry<String> GRAVITINO_URI =
-      new ConfigBuilder("gravitino.test.gravitino.uri")
-          .doc("Gravitino uri address")
+  private static final ConfigEntry<Boolean> GENERATE_GOLDEN_FILES =
+      new ConfigBuilder("gravitino.test.generate.golden.files")
+          .doc(
+              "Whether generate golden files which are used to check the correctness of the SQL result")
           .version("0.6.0")
-          .stringConf()
-          .createWithDefault("http://127.0.0.1:8090");
+          .booleanConf()
+          .createWithDefault(Boolean.FALSE);
 
   private static final ConfigEntry<String> GRAVITINO_METALAKE_NAME =
       new ConfigBuilder("gravitino.test.gravitino.metalake")
-          .doc("The metalake name")
+          .doc("The metalake name to run the test")
           .version("0.6.0")
           .stringConf()
           .createWithDefault("test");
-
-  private static final ConfigEntry<String> WAREHOUSE_DIR =
-      new ConfigBuilder("gravitino.test.gravitino.warehouse")
-          .doc("The warehouse location")
-          .version("0.6.0")
-          .stringConf()
-          .createWithDefault("hdfs://127.0.0.1:9000/user/hive/warehouse-spark-test");
 
   private static final ConfigEntry<Boolean> SETUP_GRAVITINO_ENV =
       new ConfigBuilder("gravitino.test.setup.env")
@@ -68,12 +62,19 @@ public class SparkTestConfig extends Config {
           .booleanConf()
           .createWithDefault(Boolean.FALSE);
 
-  private static final ConfigEntry<Boolean> GENERATE_GOLDEN_FILES =
-      new ConfigBuilder("gravitino.test.generate.golden.files")
-          .doc("Whether generate golden files")
+  private static final ConfigEntry<String> GRAVITINO_URI =
+      new ConfigBuilder("gravitino.test.gravitino.uri")
+          .doc("Gravitino uri address, only available when `gravitino.test.setup.env` is false")
           .version("0.6.0")
-          .booleanConf()
-          .createWithDefault(Boolean.FALSE);
+          .stringConf()
+          .createWithDefault("http://127.0.0.1:8090");
+
+  private static final ConfigEntry<String> WAREHOUSE_DIR =
+      new ConfigBuilder("gravitino.test.gravitino.warehouse")
+          .doc("The warehouse location, only available when `gravitino.test.setup.env` is false")
+          .version("0.6.0")
+          .stringConf()
+          .createWithDefault("hdfs://127.0.0.1:9000/user/hive/warehouse-spark-test");
 
   public String getBaseDir() {
     return get(TEST_BASE_DIR);

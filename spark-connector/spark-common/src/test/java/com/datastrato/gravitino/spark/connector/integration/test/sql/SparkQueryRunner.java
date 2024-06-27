@@ -35,8 +35,12 @@ import org.junit.jupiter.api.Assertions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/** Run and check the correctness of the SparkSQLs */
 public class SparkQueryRunner {
-  public static final Logger LOG = LoggerFactory.getLogger(SparkSQLRegressionTest.class);
+
+  private static final Logger LOG = LoggerFactory.getLogger(SparkSQLRegressionTest.class);
+  private static final String HIVE_CATALOG_NAME = "hive";
+  private static final String ICEBERG_CATALOG_NAME = "iceberg";
 
   private SparkSession sparkSession;
   private String gravitinoUri;
@@ -69,18 +73,17 @@ public class SparkQueryRunner {
     }
     initSparkEnv();
 
-    catalogs.put(CatalogType.HIVE, "hive");
-    catalogs.put(CatalogType.ICEBERG, "iceberg");
-    catalogs.put(CatalogType.UNKNOWN, "hive");
+    catalogs.put(CatalogType.HIVE, HIVE_CATALOG_NAME);
+    catalogs.put(CatalogType.ICEBERG, ICEBERG_CATALOG_NAME);
+    catalogs.put(CatalogType.UNKNOWN, HIVE_CATALOG_NAME);
   }
 
   public void runQuery(TestCaseGroup sqlTestCaseGroup) throws IOException {
     useCatalog(sqlTestCaseGroup.getCatalogType());
-    if (sqlTestCaseGroup.prepareFile != null) {
-      runQuery(sqlTestCaseGroup.prepareFile);
-    }
-
     try {
+      if (sqlTestCaseGroup.prepareFile != null) {
+        runQuery(sqlTestCaseGroup.prepareFile);
+      }
       sqlTestCaseGroup.testCases.forEach(
           testCase -> {
             try {
@@ -127,13 +130,16 @@ public class SparkQueryRunner {
 
     // init metalake and catalog
     GravitinoAdminClient client = AbstractIT.getGravitinoClient();
-
     client.createMetalake(metalakeName, "", Collections.emptyMap());
     GravitinoMetalake metalake = client.loadMetalake(metalakeName);
     metalake.createCatalog(
-        "hive", Catalog.Type.RELATIONAL, "hive", "", getHiveCatalogConfigs(hiveMetastoreUri));
+        HIVE_CATALOG_NAME,
+        Catalog.Type.RELATIONAL,
+        "hive",
+        "",
+        getHiveCatalogConfigs(hiveMetastoreUri));
     metalake.createCatalog(
-        "iceberg",
+        ICEBERG_CATALOG_NAME,
         Catalog.Type.RELATIONAL,
         "lakehouse-iceberg",
         "",
@@ -183,7 +189,7 @@ public class SparkQueryRunner {
   }
 
   private void runTestCase(TestCase testCase) throws IOException {
-    LOG.info("run test case:{}", testCase.toString());
+    LOG.info("Run test case:{}", testCase.toString());
     List<String> queries = getQueriesFromFile(testCase.getTestFile());
     List<QueryOutput> queryOutputs = runTestQueries(queries, true);
     if (regenerateGoldenFiles) {
@@ -192,21 +198,21 @@ public class SparkQueryRunner {
     List<QueryOutput> expectedOutputs = getExpectedOutputs(testCase.getTestOutputFile());
 
     Assertions.assertEquals(
-        expectedOutputs.size(), queryOutputs.size(), "query size not match for test: " + testCase);
+        expectedOutputs.size(), queryOutputs.size(), "Query size not match for test: " + testCase);
 
     for (int i = 0; i < expectedOutputs.size(); i++) {
       QueryOutput queryOutput = queryOutputs.get(i);
       QueryOutput expectedOutput = expectedOutputs.get(i);
       Assertions.assertEquals(
-          expectedOutput.getSql(), queryOutput.getSql(), "sql not match for test: " + testCase);
+          expectedOutput.getSql(), queryOutput.getSql(), "SQL not match for test: " + testCase);
       Assertions.assertEquals(
           expectedOutput.getSchema(),
           queryOutput.getSchema(),
-          "schema not match for test: " + testCase);
+          "SQL schema not match for test: " + testCase);
       Assertions.assertEquals(
           expectedOutput.getOutput(),
           queryOutput.getOutput(),
-          "sql output not match for test: " + testCase + ", sql: " + expectedOutput.getSql());
+          "SQL output not match for test: " + testCase + ", sql: " + expectedOutput.getSql());
     }
   }
 

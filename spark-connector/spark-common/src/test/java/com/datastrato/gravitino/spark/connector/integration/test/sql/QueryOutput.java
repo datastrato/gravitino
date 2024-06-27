@@ -7,6 +7,7 @@ package com.datastrato.gravitino.spark.connector.integration.test.sql;
 
 import lombok.Getter;
 
+/** The SQL execution output, include schemas and output */
 @Getter
 public class QueryOutput {
   private String sql;

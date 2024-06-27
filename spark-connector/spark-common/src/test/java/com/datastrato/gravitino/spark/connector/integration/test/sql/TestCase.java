@@ -10,7 +10,7 @@ import java.nio.file.Paths;
 import lombok.Getter;
 import lombok.ToString;
 
-/** A test sql files which contains sql queries. */
+/** A test SQL files which contains multi SQL queries. */
 @Getter
 @ToString
 public class TestCase {
@@ -20,6 +20,8 @@ public class TestCase {
     this.testFile = testFile;
   }
 
+  // The SQL output to check the correctness the SQL result, The output file of '/a/b.sql' is
+  // '/a/b.sql.out'
   public Path getTestOutputFile() {
     String fileName = testFile.getFileName().toString();
     String outputFileName = fileName + ".out";
