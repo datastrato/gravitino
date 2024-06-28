@@ -106,12 +106,21 @@ public class GravitinoEnv {
    *
    * @param config The configuration object to initialize the environment.
    */
-  public void initialize(Config config) {
+  public void initialize(Config config, boolean initGravitinoServerComponet) {
     LOG.info("Initializing Gravitino Environment...");
 
     this.config = config;
     this.metricsSystem = new MetricsSystem();
     metricsSystem.register(new JVMMetricsSource());
+
+    this.eventListenerManager = new EventListenerManager();
+    eventListenerManager.init(
+        config.getConfigsWithPrefix(EventListenerManager.GRAVITINO_EVENT_LISTENER_PREFIX));
+    EventBus eventBus = eventListenerManager.createEventBus();
+
+    if (!initGravitinoServerComponet) {
+      return;
+    }
 
     // Initialize EntityStore
     this.entityStore = EntityStoreFactory.createEntityStore(config);
@@ -119,11 +128,6 @@ public class GravitinoEnv {
 
     // create and initialize a random id generator
     this.idGenerator = new RandomIdGenerator();
-
-    this.eventListenerManager = new EventListenerManager();
-    eventListenerManager.init(
-        config.getConfigsWithPrefix(EventListenerManager.GRAVITINO_EVENT_LISTENER_PREFIX));
-    EventBus eventBus = eventListenerManager.createEventBus();
 
     // Create and initialize metalake related modules
     MetalakeManager metalakeManager = new MetalakeManager(entityStore, idGenerator);
