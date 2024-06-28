@@ -461,6 +461,7 @@ tasks.rat {
     "**/licenses/*.txt",
     "**/licenses/*.md",
     "integration-test/**",
+    "spark-connector/spark-common/src/test/resources/**",
     "web/.**",
     "web/next-env.d.ts",
     "web/dist/**/*",
