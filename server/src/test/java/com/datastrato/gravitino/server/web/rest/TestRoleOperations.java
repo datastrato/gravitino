@@ -10,9 +10,11 @@ import static com.datastrato.gravitino.Configs.TREE_LOCK_MIN_NODE_IN_MEMORY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 
 import com.datastrato.gravitino.Config;
+import com.datastrato.gravitino.EntityStore;
 import com.datastrato.gravitino.GravitinoEnv;
 import com.datastrato.gravitino.authorization.AccessControlManager;
 import com.datastrato.gravitino.authorization.Privileges;
@@ -62,6 +64,7 @@ import org.mockito.Mockito;
 public class TestRoleOperations extends JerseyTest {
 
   private static final AccessControlManager manager = mock(AccessControlManager.class);
+  private static final EntityStore store = mock(EntityStore.class);
   private static final MetalakeDispatcher metalakeDispatcher = mock(MetalakeDispatcher.class);
   private static final CatalogDispatcher catalogDispatcher = mock(CatalogDispatcher.class);
   private static final SchemaDispatcher schemaDispatcher = mock(SchemaDispatcher.class);
@@ -84,6 +87,7 @@ public class TestRoleOperations extends JerseyTest {
     Mockito.doReturn(100000L).when(config).get(TREE_LOCK_MAX_NODE_IN_MEMORY);
     Mockito.doReturn(1000L).when(config).get(TREE_LOCK_MIN_NODE_IN_MEMORY);
     Mockito.doReturn(36000L).when(config).get(TREE_LOCK_CLEAN_INTERVAL);
+
     FieldUtils.writeField(GravitinoEnv.getInstance(), "lockManager", new LockManager(config), true);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "accessControlManager", manager, true);
     FieldUtils.writeField(
@@ -95,6 +99,7 @@ public class TestRoleOperations extends JerseyTest {
     FieldUtils.writeField(GravitinoEnv.getInstance(), "tableDispatcher", tableDispatcher, true);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "topicDispatcher", topicDispatcher, true);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "filesetDispatcher", filesetDispatcher, true);
+    FieldUtils.writeField(GravitinoEnv.getInstance(), "entityStore", store, true);
   }
 
   @Override
@@ -120,7 +125,7 @@ public class TestRoleOperations extends JerseyTest {
   }
 
   @Test
-  public void testCreateRole() {
+  public void testCreateRole() throws IOException {
     SecurableObject securableObject =
         SecurableObjects.ofCatalog("catalog", Lists.newArrayList(Privileges.UseCatalog.allow()));
     SecurableObject anotherSecurableObject =
@@ -137,6 +142,7 @@ public class TestRoleOperations extends JerseyTest {
     Role role = buildRole("role1");
 
     when(manager.createRole(any(), any(), any(), any())).thenReturn(role);
+    when(store.exists(any(), any())).thenReturn(true);
     when(catalogDispatcher.catalogExists(any())).thenReturn(true);
 
     Response resp =
@@ -244,10 +250,11 @@ public class TestRoleOperations extends JerseyTest {
   }
 
   @Test
-  public void testGetRole() {
+  public void testGetRole() throws IOException {
     Role role = buildRole("role1");
 
     when(manager.getRole(any(), any())).thenReturn(role);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/roles/role1")
@@ -336,8 +343,9 @@ public class TestRoleOperations extends JerseyTest {
   }
 
   @Test
-  public void testDeleteRole() {
+  public void testDeleteRole() throws IOException {
     when(manager.deleteRole(any(), any())).thenReturn(true);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/roles/role1")
@@ -350,7 +358,23 @@ public class TestRoleOperations extends JerseyTest {
     Assertions.assertEquals(0, deleteResponse.getCode());
     Assertions.assertTrue(deleteResponse.deleted());
 
+    // Test to throw NoSuchMetalakeException
+    doThrow(new NoSuchMetalakeException("mock error")).when(manager).deleteRole(any(), any());
+    Response resp1 =
+        target("/metalakes/metalake1/roles/role1")
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .accept("application/vnd.gravitino.v1+json")
+            .delete();
+
+    Assertions.assertEquals(Response.Status.NOT_FOUND.getStatusCode(), resp1.getStatus());
+    Assertions.assertEquals(MediaType.APPLICATION_JSON_TYPE, resp1.getMediaType());
+
+    ErrorResponse errorResponse = resp1.readEntity(ErrorResponse.class);
+    Assertions.assertEquals(ErrorConstants.NOT_FOUND_CODE, errorResponse.getCode());
+    Assertions.assertEquals(NoSuchMetalakeException.class.getSimpleName(), errorResponse.getType());
+
     // Test when failed to delete role
+    reset(manager);
     when(manager.deleteRole(any(), any())).thenReturn(false);
     Response resp2 =
         target("/metalakes/metalake1/roles/role1")
@@ -373,7 +397,7 @@ public class TestRoleOperations extends JerseyTest {
     Assertions.assertEquals(
         Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), resp3.getStatus());
 
-    ErrorResponse errorResponse = resp3.readEntity(ErrorResponse.class);
+    errorResponse = resp3.readEntity(ErrorResponse.class);
     Assertions.assertEquals(ErrorConstants.INTERNAL_ERROR_CODE, errorResponse.getCode());
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse.getType());
   }

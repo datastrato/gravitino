@@ -8,6 +8,7 @@ import static com.datastrato.gravitino.Configs.TREE_LOCK_CLEAN_INTERVAL;
 import static com.datastrato.gravitino.Configs.TREE_LOCK_MAX_NODE_IN_MEMORY;
 import static com.datastrato.gravitino.Configs.TREE_LOCK_MIN_NODE_IN_MEMORY;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.datastrato.gravitino.Config;
 import com.datastrato.gravitino.GravitinoEnv;
@@ -19,7 +20,7 @@ import com.datastrato.gravitino.dto.responses.ErrorConstants;
 import com.datastrato.gravitino.dto.responses.ErrorResponse;
 import com.datastrato.gravitino.dto.responses.RemoveResponse;
 import com.datastrato.gravitino.dto.responses.UserResponse;
-import com.datastrato.gravitino.exceptions.UserAlreadyExistsException;
+import com.datastrato.gravitino.exceptions.PrivilegesAlreadyGrantedException;
 import com.datastrato.gravitino.lock.LockManager;
 import com.datastrato.gravitino.meta.AuditInfo;
 import com.datastrato.gravitino.meta.UserEntity;
@@ -50,7 +51,7 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     @Override
     public HttpServletRequest get() {
       HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
-      Mockito.when(request.getRemoteUser()).thenReturn(null);
+      when(request.getRemoteUser()).thenReturn(null);
       return request;
     }
   }
@@ -92,7 +93,7 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     UserAddRequest req = new UserAddRequest("user1");
     User user = buildUser("user1");
 
-    Mockito.when(manager.addMetalakeAdmin(any())).thenReturn(user);
+    when(manager.addMetalakeAdmin(any())).thenReturn(user);
 
     Response resp =
         target("/admins")
@@ -111,8 +112,8 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     Assertions.assertNotNull(userDTO.roles());
     Assertions.assertTrue(userDTO.roles().isEmpty());
 
-    // Test to throw UserAlreadyExistsException
-    Mockito.doThrow(new UserAlreadyExistsException("mock error"))
+    // Test to throw PrivilegesAlreadyGrantedException
+    Mockito.doThrow(new PrivilegesAlreadyGrantedException("mock error"))
         .when(manager)
         .addMetalakeAdmin(any());
     Response resp2 =
@@ -126,7 +127,7 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     ErrorResponse errorResponse1 = resp2.readEntity(ErrorResponse.class);
     Assertions.assertEquals(ErrorConstants.ALREADY_EXISTS_CODE, errorResponse1.getCode());
     Assertions.assertEquals(
-        UserAlreadyExistsException.class.getSimpleName(), errorResponse1.getType());
+        PrivilegesAlreadyGrantedException.class.getSimpleName(), errorResponse1.getType());
 
     // Test to throw internal RuntimeException
     Mockito.doThrow(new RuntimeException("mock error")).when(manager).addMetalakeAdmin(any());
@@ -144,19 +145,9 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse2.getType());
   }
 
-  private User buildUser(String user) {
-    return UserEntity.builder()
-        .withId(1L)
-        .withName(user)
-        .withRoleNames(Collections.emptyList())
-        .withAuditInfo(
-            AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build())
-        .build();
-  }
-
   @Test
   public void testRemoveMetalakeAdmin() {
-    Mockito.when(manager.removeMetalakeAdmin(any())).thenReturn(true);
+    when(manager.removeMetalakeAdmin(any())).thenReturn(true);
 
     Response resp =
         target("/admins/user1")
@@ -170,7 +161,7 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     Assertions.assertTrue(removeResponse.removed());
 
     // Test when failed to remove user
-    Mockito.when(manager.removeMetalakeAdmin(any())).thenReturn(false);
+    when(manager.removeMetalakeAdmin(any())).thenReturn(false);
     Response resp2 =
         target("/admins/user1")
             .request(MediaType.APPLICATION_JSON_TYPE)
@@ -195,5 +186,15 @@ public class TestMetalakeAdminOperations extends JerseyTest {
     ErrorResponse errorResponse = resp3.readEntity(ErrorResponse.class);
     Assertions.assertEquals(ErrorConstants.INTERNAL_ERROR_CODE, errorResponse.getCode());
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse.getType());
+  }
+
+  private User buildUser(String user) {
+    return UserEntity.builder()
+        .withId(1L)
+        .withName(user)
+        .withRoleNames(Collections.emptyList())
+        .withAuditInfo(
+            AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build())
+        .build();
   }
 }

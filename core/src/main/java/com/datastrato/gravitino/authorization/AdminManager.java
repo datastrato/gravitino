@@ -10,8 +10,7 @@ import com.datastrato.gravitino.Entity;
 import com.datastrato.gravitino.EntityAlreadyExistsException;
 import com.datastrato.gravitino.EntityStore;
 import com.datastrato.gravitino.NameIdentifier;
-import com.datastrato.gravitino.Namespace;
-import com.datastrato.gravitino.exceptions.UserAlreadyExistsException;
+import com.datastrato.gravitino.exceptions.PrivilegesAlreadyGrantedException;
 import com.datastrato.gravitino.meta.AuditInfo;
 import com.datastrato.gravitino.meta.UserEntity;
 import com.datastrato.gravitino.storage.IdGenerator;
@@ -45,29 +44,28 @@ class AdminManager {
   }
 
   User addMetalakeAdmin(String user) {
-
-    UserEntity userEntity =
-        UserEntity.builder()
-            .withId(idGenerator.nextId())
-            .withName(user)
-            .withNamespace(
-                Namespace.of(
-                    Entity.SYSTEM_METALAKE_RESERVED_NAME,
-                    Entity.AUTHORIZATION_CATALOG_NAME,
-                    Entity.ADMIN_SCHEMA_NAME))
-            .withRoleNames(Lists.newArrayList())
-            .withAuditInfo(
-                AuditInfo.builder()
-                    .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
-                    .withCreateTime(Instant.now())
-                    .build())
-            .build();
     try {
+      UserEntity userEntity =
+          UserEntity.builder()
+              .withId(idGenerator.nextId())
+              .withName(user)
+              .withNamespace(
+                  AuthorizationUtils.ofUserNamespace(Entity.SYSTEM_METALAKE_RESERVED_NAME))
+              .withRoleNames(Lists.newArrayList())
+              .withRoleIds(Lists.newArrayList())
+              .withAuditInfo(
+                  AuditInfo.builder()
+                      .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
+                      .withCreateTime(Instant.now())
+                      .build())
+              .build();
+
       store.put(userEntity, false /* overwritten */);
       return userEntity;
     } catch (EntityAlreadyExistsException e) {
-      LOG.warn("User {} in the metalake admin already exists", user, e);
-      throw new UserAlreadyExistsException("User %s in the metalake admin already exists", user);
+      LOG.warn("The metalake admin {} has been added before", user, e);
+      throw new PrivilegesAlreadyGrantedException(
+          "The metalake admin %s has been added before", user);
     } catch (IOException ioe) {
       LOG.error("Adding user {} failed to the metalake admin due to storage issues", user, ioe);
       throw new RuntimeException(ioe);
@@ -88,21 +86,7 @@ class AdminManager {
     return serviceAdmins.contains(user);
   }
 
-  boolean isMetalakeAdmin(String user) {
-    try {
-      return store.exists(ofMetalakeAdmin(user), Entity.EntityType.USER);
-    } catch (IOException ioe) {
-      LOG.error(
-          "Fail to check whether {} is the metalake admin {} due to storage issues", user, ioe);
-      throw new RuntimeException(ioe);
-    }
-  }
-
   private NameIdentifier ofMetalakeAdmin(String user) {
-    return NameIdentifier.of(
-        Entity.SYSTEM_METALAKE_RESERVED_NAME,
-        Entity.AUTHORIZATION_CATALOG_NAME,
-        Entity.ADMIN_SCHEMA_NAME,
-        user);
+    return AuthorizationUtils.ofUser(Entity.SYSTEM_METALAKE_RESERVED_NAME, user);
   }
 }

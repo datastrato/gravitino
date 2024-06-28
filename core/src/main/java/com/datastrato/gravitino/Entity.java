@@ -23,9 +23,6 @@ public interface Entity extends Serializable {
   /** The system reserved catalog name. */
   String SYSTEM_CATALOG_RESERVED_NAME = "system";
 
-  /** The authorization catalog name in the system metalake. */
-  String AUTHORIZATION_CATALOG_NAME = "authorization";
-
   /** The user schema name in the system catalog. */
   String USER_SCHEMA_NAME = "user";
 
@@ -35,15 +32,12 @@ public interface Entity extends Serializable {
   /** The role schema name in the system catalog. */
   String ROLE_SCHEMA_NAME = "role";
 
-  /** The admin schema name in the authorization catalog of the system metalake. */
-  String ADMIN_SCHEMA_NAME = "admin";
-
   /** The tag schema name in the system catalog. */
   String TAG_SCHEMA_NAME = "tag";
 
   /**
    * All metalakes are a virtual entity. It represents all the metalakes. We don't store it. We use
-   * a specific type to represent its entity type.
+   * a specific type to represent its entity id.
    */
   String ALL_METALAKES_ENTITY_TYPE = "ROOT";
 

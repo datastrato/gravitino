@@ -25,21 +25,6 @@ public class AuthorizationUtils {
 
   private AuthorizationUtils() {}
 
-  static void checkMetalakeExists(String metalake) throws NoSuchMetalakeException {
-    try {
-      EntityStore store = GravitinoEnv.getInstance().entityStore();
-
-      NameIdentifier metalakeIdent = NameIdentifier.of(metalake);
-      if (!store.exists(metalakeIdent, Entity.EntityType.METALAKE)) {
-        LOG.warn("Metalake {} does not exist", metalakeIdent);
-        throw new NoSuchMetalakeException(METALAKE_DOES_NOT_EXIST_MSG, metalakeIdent);
-      }
-    } catch (IOException e) {
-      LOG.error("Failed to do storage operation", e);
-      throw new RuntimeException(e);
-    }
-  }
-
   public static NameIdentifier ofRole(String metalake, String role) {
     return NameIdentifier.of(
         metalake, Entity.SYSTEM_CATALOG_RESERVED_NAME, Entity.ROLE_SCHEMA_NAME, role);
@@ -101,5 +86,21 @@ public class AuthorizationUtils {
         namespace != null && namespace.length() == 3,
         "Role namespace must have 3 levels, the input namespace is %s",
         namespace);
+  }
+
+  public static Void checkMetalakeExists(String metalake) throws NoSuchMetalakeException {
+    try {
+      EntityStore store = GravitinoEnv.getInstance().entityStore();
+
+      NameIdentifier metalakeIdent = NameIdentifier.of(metalake);
+      if (!store.exists(metalakeIdent, Entity.EntityType.METALAKE)) {
+        LOG.warn("Metalake {} does not exist", metalakeIdent);
+        throw new NoSuchMetalakeException(METALAKE_DOES_NOT_EXIST_MSG, metalakeIdent);
+      }
+      return null;
+    } catch (IOException e) {
+      LOG.error("Failed to do storage operation", e);
+      throw new RuntimeException(e);
+    }
   }
 }

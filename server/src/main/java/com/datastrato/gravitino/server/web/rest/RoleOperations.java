@@ -11,8 +11,10 @@ import com.datastrato.gravitino.MetadataObject;
 import com.datastrato.gravitino.MetadataObjects;
 import com.datastrato.gravitino.NameIdentifier;
 import com.datastrato.gravitino.authorization.AccessControlManager;
+import com.datastrato.gravitino.authorization.AuthorizationUtils;
 import com.datastrato.gravitino.authorization.Privilege;
 import com.datastrato.gravitino.authorization.Privileges;
+import com.datastrato.gravitino.authorization.Role;
 import com.datastrato.gravitino.authorization.SecurableObject;
 import com.datastrato.gravitino.authorization.SecurableObjects;
 import com.datastrato.gravitino.dto.authorization.SecurableObjectDTO;
@@ -23,6 +25,7 @@ import com.datastrato.gravitino.dto.util.DTOConverters;
 import com.datastrato.gravitino.lock.LockType;
 import com.datastrato.gravitino.lock.TreeLockUtils;
 import com.datastrato.gravitino.metrics.MetricNames;
+import com.datastrato.gravitino.server.authorization.NameBindings;
 import com.datastrato.gravitino.server.web.Utils;
 import java.util.Arrays;
 import java.util.List;
@@ -39,6 +42,7 @@ import javax.ws.rs.core.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+@NameBindings.AccessControlInterfaces
 @Path("/metalakes/{metalake}/roles")
 public class RoleOperations {
   private static final Logger LOG = LoggerFactory.getLogger(RoleOperations.class);
@@ -48,6 +52,9 @@ public class RoleOperations {
   @Context private HttpServletRequest httpRequest;
 
   public RoleOperations() {
+    // Because accessManager may be null when Gravitino doesn't enable authorization,
+    // and Jersey injection doesn't support null value. So RoleOperations chooses to retrieve
+    // accessControlManager from GravitinoEnv instead of injection here.
     this.accessControlManager = GravitinoEnv.getInstance().accessControlManager();
   }
 
@@ -58,6 +65,11 @@ public class RoleOperations {
   @ResponseMetered(name = "get-role", absolute = true)
   public Response getRole(@PathParam("metalake") String metalake, @PathParam("role") String role) {
     try {
+      TreeLockUtils.doWithTreeLock(
+          NameIdentifier.of(metalake),
+          LockType.READ,
+          () -> AuthorizationUtils.checkMetalakeExists(metalake));
+
       return Utils.doAs(
           httpRequest,
           () ->
@@ -75,6 +87,15 @@ public class RoleOperations {
   @ResponseMetered(name = "create-role", absolute = true)
   public Response createRole(@PathParam("metalake") String metalake, RoleCreateRequest request) {
     try {
+      TreeLockUtils.doWithTreeLock(
+          NameIdentifier.of(metalake),
+          LockType.READ,
+          () -> AuthorizationUtils.checkMetalakeExists(metalake));
+
+      if (request.getName().startsWith(Role.SYSTEM_RESERVED_ROLE_NAME_PREFIX)) {
+        throw new IllegalArgumentException(
+            "Can't create a role with with reserved prefix `system_role`");
+      }
 
       for (SecurableObjectDTO object : request.getSecurableObjects()) {
         checkSecurableObject(metalake, object);
@@ -128,6 +149,11 @@ public class RoleOperations {
   public Response deleteRole(
       @PathParam("metalake") String metalake, @PathParam("role") String role) {
     try {
+      TreeLockUtils.doWithTreeLock(
+          NameIdentifier.of(metalake),
+          LockType.READ,
+          () -> AuthorizationUtils.checkMetalakeExists(metalake));
+
       return Utils.doAs(
           httpRequest,
           () -> {

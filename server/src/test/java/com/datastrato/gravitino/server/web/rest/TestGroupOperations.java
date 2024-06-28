@@ -13,6 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.datastrato.gravitino.Config;
+import com.datastrato.gravitino.EntityStore;
 import com.datastrato.gravitino.GravitinoEnv;
 import com.datastrato.gravitino.authorization.AccessControlManager;
 import com.datastrato.gravitino.authorization.Group;
@@ -50,6 +51,7 @@ import org.mockito.Mockito;
 public class TestGroupOperations extends JerseyTest {
 
   private static final AccessControlManager manager = mock(AccessControlManager.class);
+  private static final EntityStore store = mock(EntityStore.class);
 
   private static class MockServletRequestFactory extends ServletRequestFactoryBase {
     @Override
@@ -68,6 +70,7 @@ public class TestGroupOperations extends JerseyTest {
     Mockito.doReturn(36000L).when(config).get(TREE_LOCK_CLEAN_INTERVAL);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "lockManager", new LockManager(config), true);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "accessControlManager", manager, true);
+    FieldUtils.writeField(GravitinoEnv.getInstance(), "entityStore", store, true);
   }
 
   @Override
@@ -93,11 +96,11 @@ public class TestGroupOperations extends JerseyTest {
   }
 
   @Test
-  public void testAddGroup() {
+  public void testAddGroup() throws IOException {
     GroupAddRequest req = new GroupAddRequest("group1");
     Group group = buildGroup("group1");
-
     when(manager.addGroup(any(), any())).thenReturn(group);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/groups")
@@ -163,10 +166,10 @@ public class TestGroupOperations extends JerseyTest {
   }
 
   @Test
-  public void testGetGroup() {
+  public void testGetGroup() throws IOException {
     Group group = buildGroup("group1");
-
     when(manager.getGroup(any(), any())).thenReturn(group);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/groups/group1")
@@ -227,19 +230,10 @@ public class TestGroupOperations extends JerseyTest {
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse2.getType());
   }
 
-  private Group buildGroup(String group) {
-    return GroupEntity.builder()
-        .withId(1L)
-        .withName(group)
-        .withRoleNames(Collections.emptyList())
-        .withAuditInfo(
-            AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build())
-        .build();
-  }
-
   @Test
-  public void testRemoveGroup() {
+  public void testRemoveGroup() throws IOException {
     when(manager.removeGroup(any(), any())).thenReturn(true);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/groups/group1")
@@ -265,6 +259,20 @@ public class TestGroupOperations extends JerseyTest {
     Assertions.assertEquals(0, removeResponse2.getCode());
     Assertions.assertFalse(removeResponse2.removed());
 
+    // Test to throw NoSuchMetalakeException
+    doThrow(new NoSuchMetalakeException("mock error")).when(manager).removeGroup(any(), any());
+    Response resp1 =
+        target("/metalakes/metalake1/groups/group1")
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .accept("application/vnd.gravitino.v1+json")
+            .delete();
+
+    Assertions.assertEquals(Response.Status.NOT_FOUND.getStatusCode(), resp1.getStatus());
+
+    ErrorResponse errorResponse = resp1.readEntity(ErrorResponse.class);
+    Assertions.assertEquals(ErrorConstants.NOT_FOUND_CODE, errorResponse.getCode());
+    Assertions.assertEquals(NoSuchMetalakeException.class.getSimpleName(), errorResponse.getType());
+
     doThrow(new RuntimeException("mock error")).when(manager).removeGroup(any(), any());
     Response resp3 =
         target("/metalakes/metalake1/groups/group1")
@@ -275,8 +283,18 @@ public class TestGroupOperations extends JerseyTest {
     Assertions.assertEquals(
         Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), resp3.getStatus());
 
-    ErrorResponse errorResponse = resp3.readEntity(ErrorResponse.class);
+    errorResponse = resp3.readEntity(ErrorResponse.class);
     Assertions.assertEquals(ErrorConstants.INTERNAL_ERROR_CODE, errorResponse.getCode());
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse.getType());
+  }
+
+  private Group buildGroup(String group) {
+    return GroupEntity.builder()
+        .withId(1L)
+        .withName(group)
+        .withRoleNames(Collections.emptyList())
+        .withAuditInfo(
+            AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build())
+        .build();
   }
 }

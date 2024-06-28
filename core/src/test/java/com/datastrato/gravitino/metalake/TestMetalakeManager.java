@@ -4,17 +4,21 @@
  */
 package com.datastrato.gravitino.metalake;
 
+import static com.datastrato.gravitino.Configs.SERVICE_ADMINS;
+
 import com.datastrato.gravitino.Config;
 import com.datastrato.gravitino.EntityStore;
 import com.datastrato.gravitino.MetalakeChange;
 import com.datastrato.gravitino.NameIdentifier;
 import com.datastrato.gravitino.StringIdentifier;
+import com.datastrato.gravitino.auth.AuthConstants;
 import com.datastrato.gravitino.exceptions.MetalakeAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.NoSuchMetalakeException;
 import com.datastrato.gravitino.meta.BaseMetalake;
 import com.datastrato.gravitino.storage.RandomIdGenerator;
 import com.datastrato.gravitino.storage.memory.TestMemoryEntityStore;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.util.Map;
@@ -35,6 +39,8 @@ public class TestMetalakeManager {
   @BeforeAll
   public static void setUp() {
     config = new Config(false) {};
+    config.set(
+        SERVICE_ADMINS, Lists.newArrayList(AuthConstants.ANONYMOUS_USER, "admin1", "admin2"));
 
     entityStore = new TestMemoryEntityStore.InMemoryEntityStore();
     entityStore.initialize(config);
@@ -68,7 +74,7 @@ public class TestMetalakeManager {
   }
 
   @Test
-  public void testListMetalakes() {
+  public void testListMetalakes() throws IOException {
     NameIdentifier ident1 = NameIdentifier.of("test11");
     NameIdentifier ident2 = NameIdentifier.of("test12");
     Map<String, String> props = ImmutableMap.of("key1", "value1");
@@ -82,7 +88,7 @@ public class TestMetalakeManager {
   }
 
   @Test
-  public void testLoadMetalake() {
+  public void testLoadMetalake() throws IOException {
     NameIdentifier ident = NameIdentifier.of("test21");
     Map<String, String> props = ImmutableMap.of("key1", "value1");
 
@@ -105,7 +111,7 @@ public class TestMetalakeManager {
   }
 
   @Test
-  public void testAlterMetalake() {
+  public void testAlterMetalake() throws IOException {
     NameIdentifier ident = NameIdentifier.of("test31");
     Map<String, String> props = ImmutableMap.of("key1", "value1");
 
@@ -150,7 +156,7 @@ public class TestMetalakeManager {
   }
 
   @Test
-  public void testDropMetalake() {
+  public void testDropMetalake() throws IOException {
     NameIdentifier ident = NameIdentifier.of("test41");
     Map<String, String> props = ImmutableMap.of("key1", "value1");
 

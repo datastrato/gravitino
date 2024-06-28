@@ -56,8 +56,10 @@ public class MetalakeAdminOperations {
                   new UserResponse(
                       DTOConverters.toDTO(
                           accessControlManager.addMetalakeAdmin(request.getName())))));
+
     } catch (Exception e) {
-      return ExceptionHandlers.handleUserException(OperationType.ADD, request.getName(), null, e);
+      return ExceptionHandlers.handleMetalakeAdminException(
+          OperationType.ADD, request.getName(), e);
     }
   }
 
@@ -78,7 +80,7 @@ public class MetalakeAdminOperations {
             return Utils.ok(new RemoveResponse(removed));
           });
     } catch (Exception e) {
-      return ExceptionHandlers.handleUserException(OperationType.REMOVE, user, null, e);
+      return ExceptionHandlers.handleMetalakeAdminException(OperationType.REMOVE, user, e);
     }
   }
 }

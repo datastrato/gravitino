@@ -77,7 +77,7 @@ class RoleManager {
       Map<String, String> properties,
       List<SecurableObject> securableObjects)
       throws RoleAlreadyExistsException {
-    AuthorizationUtils.checkMetalakeExists(metalake);
+
     RoleEntity roleEntity =
         RoleEntity.builder()
             .withId(idGenerator.nextId())
@@ -108,7 +108,6 @@ class RoleManager {
 
   RoleEntity getRole(String metalake, String role) throws NoSuchRoleException {
     try {
-      AuthorizationUtils.checkMetalakeExists(metalake);
       return getRoleEntity(AuthorizationUtils.ofRole(metalake, role));
     } catch (NoSuchEntityException e) {
       LOG.warn("Role {} does not exist in the metalake {}", role, metalake, e);
@@ -118,7 +117,6 @@ class RoleManager {
 
   boolean deleteRole(String metalake, String role) {
     try {
-      AuthorizationUtils.checkMetalakeExists(metalake);
       NameIdentifier ident = AuthorizationUtils.ofRole(metalake, role);
       cache.invalidate(ident);
 
@@ -130,7 +128,7 @@ class RoleManager {
     }
   }
 
-  private RoleEntity getRoleEntity(NameIdentifier identifier) {
+  RoleEntity getRoleEntity(NameIdentifier identifier) {
     return cache.get(
         identifier,
         id -> {

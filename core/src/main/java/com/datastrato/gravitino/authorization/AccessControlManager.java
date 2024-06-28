@@ -11,13 +11,16 @@ import com.datastrato.gravitino.exceptions.NoSuchGroupException;
 import com.datastrato.gravitino.exceptions.NoSuchMetalakeException;
 import com.datastrato.gravitino.exceptions.NoSuchRoleException;
 import com.datastrato.gravitino.exceptions.NoSuchUserException;
+import com.datastrato.gravitino.exceptions.PrivilegesAlreadyGrantedException;
 import com.datastrato.gravitino.exceptions.RoleAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.UserAlreadyExistsException;
+import com.datastrato.gravitino.meta.RoleEntity;
 import com.datastrato.gravitino.storage.IdGenerator;
 import com.datastrato.gravitino.utils.Executable;
 import com.google.common.annotations.VisibleForTesting;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * AccessControlManager is used for manage users, roles, admin, grant information, this class is an
@@ -37,8 +40,8 @@ public class AccessControlManager {
   private final Object nonAdminOperationLock = new Object();
 
   public AccessControlManager(EntityStore store, IdGenerator idGenerator, Config config) {
-    this.adminManager = new AdminManager(store, idGenerator, config);
     this.roleManager = new RoleManager(store, idGenerator, config);
+    this.adminManager = new AdminManager(store, idGenerator, config);
     this.userGroupManager = new UserGroupManager(store, idGenerator, roleManager);
     this.permissionManager = new PermissionManager(store, roleManager);
   }
@@ -204,15 +207,16 @@ public class AccessControlManager {
    *
    * @param user The name of the User.
    * @return The added User instance.
-   * @throws UserAlreadyExistsException If a metalake admin with the same name already exists.
+   * @throws PrivilegesAlreadyGrantedException If the metalake admin with the same name already
+   *     added.
    * @throws RuntimeException If adding the User encounters storage issues.
    */
-  public User addMetalakeAdmin(String user) throws UserAlreadyExistsException {
+  public User addMetalakeAdmin(String user) throws PrivilegesAlreadyGrantedException {
     return doWithAdminLock(() -> adminManager.addMetalakeAdmin(user));
   }
 
   /**
-   * Removes a metalake admin.
+   * Removes a metalake admin. Only service admins can manage metalake admins.
    *
    * @param user The name of the User.
    * @return True if the User was successfully removed, false only when there's no such metalake
@@ -231,16 +235,6 @@ public class AccessControlManager {
    */
   public boolean isServiceAdmin(String user) {
     return adminManager.isServiceAdmin(user);
-  }
-
-  /**
-   * Judges whether the user is the metalake admin.
-   *
-   * @param user the name of the user
-   * @return True if the user is metalake admin, otherwise false.
-   */
-  public boolean isMetalakeAdmin(String user) {
-    return doWithAdminLock(() -> adminManager.isMetalakeAdmin(user));
   }
 
   /**
@@ -292,6 +286,17 @@ public class AccessControlManager {
    */
   public boolean deleteRole(String metalake, String role) throws NoSuchMetalakeException {
     return doWithNonAdminLock(() -> roleManager.deleteRole(metalake, role));
+  }
+
+  public List<RoleEntity> listRolesByUser(String metalake, String currentUser) {
+    return doWithNonAdminLock(
+        () -> {
+          User user = getUser(metalake, currentUser);
+          // TODO: get roles from the group
+          return user.roles().stream()
+              .map(role -> roleManager.getRole(metalake, role))
+              .collect(Collectors.toList());
+        });
   }
 
   @VisibleForTesting

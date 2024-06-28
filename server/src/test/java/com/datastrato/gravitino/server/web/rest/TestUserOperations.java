@@ -13,6 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.datastrato.gravitino.Config;
+import com.datastrato.gravitino.EntityStore;
 import com.datastrato.gravitino.GravitinoEnv;
 import com.datastrato.gravitino.authorization.AccessControlManager;
 import com.datastrato.gravitino.authorization.User;
@@ -50,6 +51,7 @@ import org.mockito.Mockito;
 public class TestUserOperations extends JerseyTest {
 
   private static final AccessControlManager manager = mock(AccessControlManager.class);
+  private static final EntityStore store = mock(EntityStore.class);
 
   private static class MockServletRequestFactory extends ServletRequestFactoryBase {
     @Override
@@ -68,6 +70,7 @@ public class TestUserOperations extends JerseyTest {
     Mockito.doReturn(36000L).when(config).get(TREE_LOCK_CLEAN_INTERVAL);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "lockManager", new LockManager(config), true);
     FieldUtils.writeField(GravitinoEnv.getInstance(), "accessControlManager", manager, true);
+    FieldUtils.writeField(GravitinoEnv.getInstance(), "entityStore", store, true);
   }
 
   @Override
@@ -93,11 +96,12 @@ public class TestUserOperations extends JerseyTest {
   }
 
   @Test
-  public void testAddUser() {
+  public void testAddUser() throws IOException {
     UserAddRequest req = new UserAddRequest("user1");
     User user = buildUser("user1");
 
     when(manager.addUser(any(), any())).thenReturn(user);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/users")
@@ -163,11 +167,11 @@ public class TestUserOperations extends JerseyTest {
   }
 
   @Test
-  public void testGetUser() {
-
+  public void testGetUser() throws IOException {
     User user = buildUser("user1");
 
     when(manager.getUser(any(), any())).thenReturn(user);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/users/user1")
@@ -228,19 +232,10 @@ public class TestUserOperations extends JerseyTest {
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse2.getType());
   }
 
-  private User buildUser(String user) {
-    return UserEntity.builder()
-        .withId(1L)
-        .withName(user)
-        .withRoleNames(Collections.emptyList())
-        .withAuditInfo(
-            AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build())
-        .build();
-  }
-
   @Test
-  public void testRemoveUser() {
+  public void testRemoveUser() throws IOException {
     when(manager.removeUser(any(), any())).thenReturn(true);
+    when(store.exists(any(), any())).thenReturn(true);
 
     Response resp =
         target("/metalakes/metalake1/users/user1")
@@ -266,6 +261,22 @@ public class TestUserOperations extends JerseyTest {
     Assertions.assertEquals(0, removeResponse2.getCode());
     Assertions.assertFalse(removeResponse2.removed());
 
+    // Test to throw NoSuchMetalakeException
+    doThrow(new NoSuchMetalakeException("mock error")).when(manager).removeUser(any(), any());
+    Response resp1 =
+        target("/metalakes/metalake1/users/user1")
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .accept("application/vnd.gravitino.v1+json")
+            .delete();
+
+    Assertions.assertEquals(Response.Status.NOT_FOUND.getStatusCode(), resp1.getStatus());
+    Assertions.assertEquals(MediaType.APPLICATION_JSON_TYPE, resp1.getMediaType());
+
+    ErrorResponse errorResponse = resp1.readEntity(ErrorResponse.class);
+    Assertions.assertEquals(ErrorConstants.NOT_FOUND_CODE, errorResponse.getCode());
+    Assertions.assertEquals(NoSuchMetalakeException.class.getSimpleName(), errorResponse.getType());
+
+    // Test to throw RuntimeException
     doThrow(new RuntimeException("mock error")).when(manager).removeUser(any(), any());
     Response resp3 =
         target("/metalakes/metalake1/users/user1")
@@ -276,8 +287,18 @@ public class TestUserOperations extends JerseyTest {
     Assertions.assertEquals(
         Response.Status.INTERNAL_SERVER_ERROR.getStatusCode(), resp3.getStatus());
 
-    ErrorResponse errorResponse = resp3.readEntity(ErrorResponse.class);
+    errorResponse = resp3.readEntity(ErrorResponse.class);
     Assertions.assertEquals(ErrorConstants.INTERNAL_ERROR_CODE, errorResponse.getCode());
     Assertions.assertEquals(RuntimeException.class.getSimpleName(), errorResponse.getType());
+  }
+
+  private User buildUser(String user) {
+    return UserEntity.builder()
+        .withId(1L)
+        .withName(user)
+        .withRoleNames(Collections.emptyList())
+        .withAuditInfo(
+            AuditInfo.builder().withCreator("creator").withCreateTime(Instant.now()).build())
+        .build();
   }
 }

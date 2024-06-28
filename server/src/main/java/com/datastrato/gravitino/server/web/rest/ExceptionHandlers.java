@@ -12,6 +12,7 @@ import com.datastrato.gravitino.exceptions.NoSuchMetalakeException;
 import com.datastrato.gravitino.exceptions.NonEmptySchemaException;
 import com.datastrato.gravitino.exceptions.NotFoundException;
 import com.datastrato.gravitino.exceptions.PartitionAlreadyExistsException;
+import com.datastrato.gravitino.exceptions.PrivilegesAlreadyGrantedException;
 import com.datastrato.gravitino.exceptions.RoleAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.SchemaAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.TableAlreadyExistsException;
@@ -62,6 +63,10 @@ public class ExceptionHandlers {
   public static Response handleUserException(
       OperationType op, String user, String metalake, Exception e) {
     return UserExceptionHandler.INSTANCE.handle(op, user, metalake, e);
+  }
+
+  public static Response handleMetalakeAdminException(OperationType op, String user, Exception e) {
+    return MetalakeAdminExceptionHandler.INSTANCE.handle(op, user, null, e);
   }
 
   public static Response handleGroupException(
@@ -297,15 +302,9 @@ public class ExceptionHandlers {
 
     private static String getUserErrorMsg(
         String user, String operation, String metalake, String reason) {
-      if (metalake == null) {
-        return String.format(
-            "Failed to operate metalake admin user %s operation [%s], reason [%s]",
-            user, operation, reason);
-      } else {
-        return String.format(
-            "Failed to operate user %s operation [%s] under metalake [%s], reason [%s]",
-            user, operation, metalake, reason);
-      }
+      return String.format(
+          "Failed to operate user %s operation [%s] under metalake [%s], reason [%s]",
+          user, operation, metalake, reason);
     }
 
     @Override
@@ -325,6 +324,37 @@ public class ExceptionHandlers {
 
       } else {
         return super.handle(op, user, metalake, e);
+      }
+    }
+  }
+
+  private static class MetalakeAdminExceptionHandler extends BaseExceptionHandler {
+
+    private static final ExceptionHandler INSTANCE = new MetalakeAdminExceptionHandler();
+
+    private static String getMetalakeAdminErrorMsg(String user, String operation, String reason) {
+      return String.format(
+          "Failed to operate metalake admin %s operation [%s], reason [%s]",
+          user, operation, reason);
+    }
+
+    @Override
+    public Response handle(OperationType op, String user, String parent, Exception e) {
+      String formatted = StringUtil.isBlank(user) ? "" : " [" + user + "]";
+      String errorMsg = getMetalakeAdminErrorMsg(formatted, op.name(), getErrorMsg(e));
+      LOG.warn(errorMsg, e);
+
+      if (e instanceof IllegalArgumentException) {
+        return Utils.illegalArguments(errorMsg, e);
+
+      } else if (e instanceof NotFoundException) {
+        return Utils.notFound(errorMsg, e);
+
+      } else if (e instanceof PrivilegesAlreadyGrantedException) {
+        return Utils.alreadyExists(errorMsg, e);
+
+      } else {
+        return super.handle(op, user, parent, e);
       }
     }
   }
