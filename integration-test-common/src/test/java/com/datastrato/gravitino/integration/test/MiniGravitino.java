@@ -194,6 +194,10 @@ public class MiniGravitino {
     LOG.debug("MiniGravitino terminated.");
   }
 
+  public void startIcebergRESTServer() {}
+
+  public void stopIcebergRESTServer() {}
+
   public Config getServerConfig() {
     return serverConfig;
   }

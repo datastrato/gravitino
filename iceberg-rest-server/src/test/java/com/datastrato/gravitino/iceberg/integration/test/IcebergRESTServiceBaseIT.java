@@ -5,14 +5,9 @@
 
 package com.datastrato.gravitino.iceberg.integration.test;
 
-
-import com.datastrato.gravitino.Config;
-import com.datastrato.gravitino.auxiliary.AuxiliaryServiceManager;
-import com.datastrato.gravitino.iceberg.common.IcebergConfig;
 import com.datastrato.gravitino.iceberg.common.IcebergCatalogBackend;
-import com.datastrato.gravitino.integration.test.util.AbstractIT;
+import com.datastrato.gravitino.iceberg.integration.test.util.IcebergRESTServerManager;
 import com.datastrato.gravitino.server.web.JettyServerConfig;
-import com.datastrato.gravitino.utils.MapUtils;
 import com.google.common.collect.ImmutableList;
 import com.google.errorprone.annotations.FormatMethod;
 import java.util.ArrayList;
@@ -36,21 +31,21 @@ import org.slf4j.LoggerFactory;
  */
 
 @SuppressWarnings("FormatStringAnnotation")
-public abstract class IcebergRESTServiceBaseIT extends AbstractIT {
+public abstract class IcebergRESTServiceBaseIT {
   public static final Logger LOG = LoggerFactory.getLogger(IcebergRESTServiceBaseIT.class);
   private SparkSession sparkSession;
   protected IcebergCatalogBackend catalogType = IcebergCatalogBackend.MEMORY;
+  private IcebergRESTServerManager icebergRESTServerManager;
 
   @BeforeAll
   void initIcebergTestEnv() throws Exception {
     // Start Gravitino docker container
     initEnv();
+    // Start Gravitino server
+    this.icebergRESTServerManager = IcebergRESTServerManager.create();
     // Inject Iceberg REST service config to gravitino.conf
     registerIcebergCatalogConfig();
-
-    ignoreIcebergRestService = false;
-    // Start Gravitino server
-    AbstractIT.startIntegrationTest();
+    icebergRESTServerManager.startIcebergRESTServer();
     // Start Spark session
     initSparkEnv();
     LOG.info("Gravitino and Spark env started,{}", catalogType);
@@ -59,18 +54,9 @@ public abstract class IcebergRESTServiceBaseIT extends AbstractIT {
   @AfterAll
   void stopIcebergTestEnv() throws Exception {
     stopSparkEnv();
-    AbstractIT.stopIntegrationTest();
+    icebergRESTServerManager.stopIcebergRESTServer();
     LOG.info("Gravitino and Spark env stopped,{}", catalogType);
   }
-
-  // AbstractIT#startIntegrationTest() is static, so we couldn't inject catalog info
-  // if startIntegrationTest() is auto invoked by Junit. So here we override
-  // startIntegrationTest() to disable the auto invoke by junit.
-  @BeforeAll
-  public static void startIntegrationTest() {}
-
-  @AfterAll
-  public static void stopIntegrationTest() {}
 
   boolean catalogTypeNotMemory() {
     return !catalogType.equals(IcebergCatalogBackend.MEMORY);
@@ -82,20 +68,20 @@ public abstract class IcebergRESTServiceBaseIT extends AbstractIT {
 
   private void registerIcebergCatalogConfig() {
     Map<String, String> icebergConfigs = getCatalogConfig();
-    AbstractIT.registerCustomConfigs(icebergConfigs);
+    icebergRESTServerManager.registerCustomConfigs(icebergConfigs);
     LOG.info("Iceberg REST service config registered, {}", StringUtils.join(icebergConfigs));
   }
 
-  private static IcebergConfig buildIcebergConfig(Config config) {
-    Map<String, String> m =
-        config.getConfigsWithPrefix(AuxiliaryServiceManager.GRAVITINO_AUX_SERVICE_PREFIX);
-    m = MapUtils.getPrefixMap(m, IcebergRESTService.SERVICE_NAME + ".");
-    return new IcebergConfig(m);
+  private int getServerPort() {
+    JettyServerConfig jettyServerConfig =
+        JettyServerConfig.fromConfig(
+            icebergRESTServerManager.getServerConfig(),
+            JettyServerConfig.GRAVITINO_SERVER_CONFIG_PREFIX);
+    return jettyServerConfig.getHttpPort();
   }
 
   private void initSparkEnv() {
-    IcebergConfig icebergConfig = buildIcebergConfig(serverConfig);
-    int port = icebergConfig.get(JettyServerConfig.WEBSERVER_HTTP_PORT);
+    int port = getServerPort();
     LOG.info("Iceberg REST server port:{}", port);
     String IcebergRESTUri = String.format("http://127.0.0.1:%d/iceberg/", port);
     sparkSession =

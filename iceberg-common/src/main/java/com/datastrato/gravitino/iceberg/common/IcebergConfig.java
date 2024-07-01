@@ -17,6 +17,7 @@ import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 
 public class IcebergConfig extends Config implements OverwriteDefaultConfig {
+  public static final String ICEBERG_CONFIG_PREFIX = "gravitino.iceberg-rest.";
 
   public static final ConfigEntry<String> CATALOG_BACKEND =
       new ConfigBuilder(IcebergConstants.CATALOG_BACKEND)

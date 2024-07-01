@@ -8,7 +8,11 @@ package com.datastrato.gravitino.server;
 import com.datastrato.gravitino.Config;
 import com.datastrato.gravitino.GravitinoEnv;
 import com.datastrato.gravitino.iceberg.RESTService;
+import com.datastrato.gravitino.iceberg.common.IcebergConfig;
 import com.datastrato.gravitino.server.authentication.ServerAuthenticator;
+import com.datastrato.gravitino.server.web.JettyServerConfig;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,7 +20,7 @@ public class IcebergRESTServer {
 
   private static final Logger LOG = LoggerFactory.getLogger(IcebergRESTServer.class);
 
-  public static final String CONF_FILE = "iceberg-rest.conf";
+  public static final String CONF_FILE = "iceberg-rest-server.conf";
 
   private final Config serverConfig;
 
@@ -31,8 +35,19 @@ public class IcebergRESTServer {
 
   public void initialize() {
     gravitinoEnv.initialize(serverConfig, false);
-    icebergRESTService.serviceInit(serverConfig.getConfigsWithPrefix("gravitino.iceberg-rest"));
+    icebergRESTService.serviceInit(getIcebergAndServerConfigs(serverConfig));
     ServerAuthenticator.getInstance().initialize(serverConfig);
+  }
+
+  private Map<String, String> getIcebergAndServerConfigs(Config config) {
+    Map<String, String> all = new HashMap<>();
+    Map<String, String> icebergProperties =
+        config.getConfigsWithPrefix(IcebergConfig.ICEBERG_CONFIG_PREFIX);
+    all.putAll(icebergProperties);
+    Map<String, String> serverProperties =
+        config.getConfigsWithPrefix(JettyServerConfig.GRAVITINO_SERVER_CONFIG_PREFIX);
+    all.putAll(serverProperties);
+    return all;
   }
 
   public void start() {

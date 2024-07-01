@@ -18,6 +18,7 @@ val scalaCollectionCompatVersion: String = libs.versions.scala.collection.compat
 
 dependencies {
   implementation(project(":core"))
+  implementation(project(":common"))
   implementation(project(":server-common"))
   implementation(libs.bundles.iceberg)
   implementation(libs.bundles.log4j)
@@ -29,6 +30,29 @@ dependencies {
   }
   implementation(libs.hadoop2.hdfs)
   implementation(libs.hadoop2.mapreduce.client.core)
+  implementation(libs.hive2.metastore) {
+    exclude("co.cask.tephra")
+    exclude("com.github.spotbugs")
+    exclude("com.google.code.findbugs", "jsr305")
+    exclude("com.tdunning", "json")
+    exclude("javax.transaction", "transaction-api")
+    exclude("org.apache.avro", "avro")
+    exclude("org.apache.hbase")
+    exclude("org.apache.hadoop", "hadoop-yarn-api")
+    exclude("org.apache.hadoop", "hadoop-yarn-server-applicationhistoryservice")
+    exclude("org.apache.hadoop", "hadoop-yarn-server-common")
+    exclude("org.apache.hadoop", "hadoop-yarn-server-resourcemanager")
+    exclude("org.apache.hadoop", "hadoop-yarn-server-web-proxy")
+    exclude("org.apache.logging.log4j")
+    exclude("org.apache.parquet", "parquet-hadoop-bundle")
+    exclude("org.apache.zookeeper")
+    exclude("org.eclipse.jetty.aggregate", "jetty-all")
+    exclude("org.eclipse.jetty.orbit", "javax.servlet")
+    exclude("org.pentaho") // missing dependency
+    exclude("org.slf4j", "slf4j-log4j12")
+    exclude("com.zaxxer", "HikariCP")
+    exclude("com.sun.jersey", "jersey-server")
+  }
 
   annotationProcessor(libs.lombok)
 

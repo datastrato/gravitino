@@ -6,7 +6,6 @@ package com.datastrato.gravitino.catalog.lakehouse.iceberg.integration.test;
 
 import com.datastrato.gravitino.auxiliary.AuxiliaryServiceManager;
 import com.datastrato.gravitino.iceberg.common.IcebergConfig;
-import com.datastrato.gravitino.iceberg.IcebergRESTService;
 import com.datastrato.gravitino.iceberg.common.IcebergConstants;
 import com.datastrato.gravitino.integration.test.container.HiveContainer;
 import com.datastrato.gravitino.server.web.JettyServerConfig;

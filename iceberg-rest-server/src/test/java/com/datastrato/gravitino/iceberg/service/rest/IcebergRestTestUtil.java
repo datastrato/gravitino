@@ -5,7 +5,6 @@
 
 package com.datastrato.gravitino.iceberg.service.rest;
 
-
 import com.datastrato.gravitino.iceberg.common.IcebergConfig;
 import com.datastrato.gravitino.iceberg.common.ops.IcebergTableOps;
 import com.datastrato.gravitino.iceberg.service.IcebergExceptionMapper;

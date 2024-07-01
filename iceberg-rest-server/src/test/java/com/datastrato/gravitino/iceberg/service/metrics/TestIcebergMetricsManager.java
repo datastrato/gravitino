@@ -5,7 +5,6 @@
 
 package com.datastrato.gravitino.iceberg.service.metrics;
 
-
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
@@ -61,8 +60,7 @@ public class TestIcebergMetricsManager {
   @Test
   void testIcebergMetricsManagerWithNotExistsStoreType() {
     IcebergConfig icebergConfig =
-        new IcebergConfig(
-            ImmutableMap.of(IcebergConstants.ICEBERG_METRICS_STORE, "not-exists"));
+        new IcebergConfig(ImmutableMap.of(IcebergConstants.ICEBERG_METRICS_STORE, "not-exists"));
 
     Assertions.assertThrowsExactly(
         RuntimeException.class, () -> new IcebergMetricsManager(icebergConfig));
@@ -72,10 +70,7 @@ public class TestIcebergMetricsManager {
   void testIcebergMetricsManagerWithMemoryStore() throws InterruptedException {
     Map<String, String> properties =
         ImmutableMap.of(
-            IcebergConstants.ICEBERG_METRICS_STORE,
-            MemoryMetricsStore.class.getName(),
-            "a",
-            "b");
+            IcebergConstants.ICEBERG_METRICS_STORE, MemoryMetricsStore.class.getName(), "a", "b");
     IcebergConfig icebergConfig = new IcebergConfig(properties);
 
     IcebergMetricsManager icebergMetricsManager = new IcebergMetricsManager(icebergConfig);

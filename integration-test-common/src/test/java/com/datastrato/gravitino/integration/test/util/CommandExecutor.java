@@ -63,8 +63,8 @@ public class CommandExecutor {
     Object outputOfProcess = dataOfProcess.getData(type);
     int exit_code = dataOfProcess.getExitCodeValue();
 
-    if (!printToConsole) LOG.trace(outputOfProcess.toString());
-    else LOG.debug(outputOfProcess.toString());
+    if (!printToConsole) LOG.info(outputOfProcess.toString());
+    else LOG.info(outputOfProcess.toString());
     if (ignore_errors == IGNORE_ERRORS.FALSE && exit_code != NORMAL_EXIT) {
       LOG.error(String.format("Command '%s' failed with exit code %s", mergedCommand, exit_code));
     }

@@ -545,8 +545,7 @@ tasks {
   }
 
   val compileIcebergRESTServer by registering {
-    dependsOn("iceberg-rest-server:copyLibs") 
-
+    dependsOn("iceberg-rest-server:copyLibs")
     group = "Iceberg REST server distribution"
     outputs.dir(projectDir.dir("distribution/${rootProject.name}-iceberg-rest-server"))
     doLast {
@@ -597,7 +596,7 @@ tasks {
   val assembleIcebergRESTServer by registering(Tar::class) {
     dependsOn("iceberg-rest-server:copyLibs")
     group = "gravitino distribution"
-    //finalizedBy("checksumTrinoConnector")
+    // finalizedBy("checksumTrinoConnector")
     into("${rootProject.name}-iceberg-rest-server-$version")
     from("iceberg-rest-server/build/libs")
     compression = Compression.GZIP
@@ -645,7 +644,7 @@ tasks {
   register("copySubprojectDependencies", Copy::class) {
     subprojects.forEach() {
       if (!it.name.startsWith("catalog") &&
-        !it.name.startsWith("client") && !it.name.startsWith("filesystem") && !it.name.startsWith("spark") && !it.name.startsWith("iceberg-")  && it.name != "trino-connector" &&
+        !it.name.startsWith("client") && !it.name.startsWith("filesystem") && !it.name.startsWith("spark") && !it.name.startsWith("iceberg-") && it.name != "trino-connector" &&
         it.name != "integration-test" && it.name != "bundled-catalog" && it.name != "flink-connector"
       ) {
         from(it.configurations.runtimeClasspath)

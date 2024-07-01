@@ -5,14 +5,10 @@
 
 package com.datastrato.gravitino.iceberg.integration.test;
 
-import com.datastrato.gravitino.auxiliary.AuxiliaryServiceManager;
 import com.datastrato.gravitino.iceberg.common.IcebergCatalogBackend;
-import com.datastrato.gravitino.iceberg.common.IcebergConfig;
-import com.datastrato.gravitino.iceberg.common.IcebergConstants;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,16 +23,15 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
 import org.junit.jupiter.api.condition.EnabledIf;
 
-@Tag("gravitino-docker-test")
+// Don't add @Tag("gravitino-docker-test"), because IcebergRESTMemoryCatalogIT don't need it.
 @SuppressWarnings("FormatStringAnnotation")
 @TestInstance(Lifecycle.PER_CLASS)
-public class IcebergRESTServiceIT extends IcebergRESTServiceBaseIT {
+public abstract class IcebergRESTServiceIT extends IcebergRESTServiceBaseIT {
 
   private static final String ICEBERG_REST_NS_PREFIX = "iceberg_rest_";
 
@@ -51,28 +46,6 @@ public class IcebergRESTServiceIT extends IcebergRESTServiceBaseIT {
   @AfterAll
   void cleanup() {
     purgeAllIcebergTestNamespaces();
-  }
-
-  @Override
-  void initEnv() {}
-
-  @Override
-  Map<String, String> getCatalogConfig() {
-    Map<String, String> configMap = new HashMap<>();
-    configMap.put(
-        AuxiliaryServiceManager.GRAVITINO_AUX_SERVICE_PREFIX
-            + IcebergConstants.GRAVITINO_ICEBERG_REST_SERVICE_NAME
-            + "."
-            + IcebergConfig.CATALOG_BACKEND.getKey(),
-        IcebergCatalogBackend.MEMORY.toString().toLowerCase());
-
-    configMap.put(
-        AuxiliaryServiceManager.GRAVITINO_AUX_SERVICE_PREFIX
-            + IcebergConstants.GRAVITINO_ICEBERG_REST_SERVICE_NAME
-            + "."
-            + IcebergConfig.CATALOG_WAREHOUSE.getKey(),
-        "/tmp/");
-    return configMap;
   }
 
   private void purgeTable(String namespace, String table) {
