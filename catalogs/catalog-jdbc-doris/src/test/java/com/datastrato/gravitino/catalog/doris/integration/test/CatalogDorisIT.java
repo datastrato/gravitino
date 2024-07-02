@@ -26,15 +26,22 @@ import com.datastrato.gravitino.rel.TableChange;
 import com.datastrato.gravitino.rel.expressions.NamedReference;
 import com.datastrato.gravitino.rel.expressions.distributions.Distribution;
 import com.datastrato.gravitino.rel.expressions.distributions.Distributions;
+import com.datastrato.gravitino.rel.expressions.literals.Literal;
+import com.datastrato.gravitino.rel.expressions.literals.Literals;
 import com.datastrato.gravitino.rel.expressions.sorts.SortOrder;
+import com.datastrato.gravitino.rel.expressions.transforms.Transform;
 import com.datastrato.gravitino.rel.expressions.transforms.Transforms;
 import com.datastrato.gravitino.rel.indexes.Index;
 import com.datastrato.gravitino.rel.indexes.Indexes;
+import com.datastrato.gravitino.rel.partitions.ListPartition;
+import com.datastrato.gravitino.rel.partitions.Partitions;
+import com.datastrato.gravitino.rel.partitions.RangePartition;
 import com.datastrato.gravitino.rel.types.Types;
 import com.datastrato.gravitino.utils.RandomNameUtils;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -72,6 +79,7 @@ public class CatalogDorisIT extends AbstractIT {
   public String DORIS_COL_NAME1 = "doris_col_name1";
   public String DORIS_COL_NAME2 = "doris_col_name2";
   public String DORIS_COL_NAME3 = "doris_col_name3";
+  public String DORIS_COL_NAME4 = "doris_col_name4";
 
   // Because the creation of Schema Change is an asynchronous process, we need to wait for a while
   // For more information, you can refer to the comment in
@@ -166,11 +174,53 @@ public class CatalogDorisIT extends AbstractIT {
   }
 
   private Column[] createColumns() {
-    Column col1 = Column.of(DORIS_COL_NAME1, Types.IntegerType.get(), "col_1_comment");
+    Column col1 =
+        Column.of(DORIS_COL_NAME1, Types.IntegerType.get(), "col_1_comment", false, false, null);
     Column col2 = Column.of(DORIS_COL_NAME2, Types.VarCharType.of(10), "col_2_comment");
     Column col3 = Column.of(DORIS_COL_NAME3, Types.VarCharType.of(10), "col_3_comment");
+    Column col4 =
+        Column.of(DORIS_COL_NAME4, Types.DateType.get(), "col_4_comment", false, false, null);
 
-    return new Column[] {col1, col2, col3};
+    return new Column[] {col1, col2, col3, col4};
+  }
+
+  private Transform[] createRangePartition() {
+    LocalDate today = LocalDate.now();
+    LocalDate tomorrow = today.plusDays(1);
+    Literals.LiteralImpl<LocalDate> todayLiteral = Literals.dateLiteral(today);
+    Literals.LiteralImpl<LocalDate> tomorrowLiteral = Literals.dateLiteral(tomorrow);
+    RangePartition rangePartition1 = Partitions.range("p1", todayLiteral, Literals.NULL, null);
+    RangePartition rangePartition2 = Partitions.range("p2", tomorrowLiteral, todayLiteral, null);
+    RangePartition rangePartition3 = Partitions.range("p3", Literals.NULL, tomorrowLiteral, null);
+    return new Transform[] {
+      Transforms.range(
+          new String[] {DORIS_COL_NAME4},
+          new RangePartition[] {rangePartition1, rangePartition2, rangePartition3})
+    };
+  }
+
+  private Transform[] createListPartition() {
+    LocalDate today = LocalDate.now();
+    LocalDate tomorrow = today.plusDays(1);
+    Literals.LiteralImpl<LocalDate> todayLiteral = Literals.dateLiteral(today);
+    Literals.LiteralImpl<LocalDate> tomorrowLiteral = Literals.dateLiteral(tomorrow);
+    Literals.LiteralImpl<Integer> integerLiteral1 = Literals.integerLiteral(1);
+    Literals.LiteralImpl<Integer> integerLiteral2 = Literals.integerLiteral(2);
+    ListPartition listPartition1 =
+        Partitions.list(
+            "p1",
+            new Literal[][] {{integerLiteral1, todayLiteral}, {integerLiteral1, tomorrowLiteral}},
+            null);
+    ListPartition listPartition2 =
+        Partitions.list(
+            "p2",
+            new Literal[][] {{integerLiteral2, todayLiteral}, {integerLiteral2, tomorrowLiteral}},
+            null);
+    return new Transform[] {
+      Transforms.list(
+          new String[][] {{DORIS_COL_NAME1}, {DORIS_COL_NAME4}},
+          new ListPartition[] {listPartition1, listPartition2})
+    };
   }
 
   private Map<String, String> createTableProperties() {
@@ -201,9 +251,7 @@ public class CatalogDorisIT extends AbstractIT {
 
     Assertions.assertThrows(
         SchemaAlreadyExistsException.class,
-        () -> {
-          schemas.createSchema(schemaIdent.name(), schema_comment, Collections.emptyMap());
-        });
+        () -> schemas.createSchema(schemaIdent.name(), schema_comment, Collections.emptyMap()));
 
     // test drop schema
     Assertions.assertTrue(schemas.dropSchema(schemaIdent.name(), false));
@@ -253,11 +301,7 @@ public class CatalogDorisIT extends AbstractIT {
 
     // Check database has been dropped
     SupportsSchemas schemas = catalog.asSchemas();
-    Assertions.assertThrows(
-        NoSuchSchemaException.class,
-        () -> {
-          schemas.loadSchema(schemaName);
-        });
+    Assertions.assertThrows(NoSuchSchemaException.class, () -> schemas.loadSchema(schemaName));
   }
 
   @Test
@@ -271,52 +315,32 @@ public class CatalogDorisIT extends AbstractIT {
     String sqlInjection = databaseName + "`; DROP TABLE important_table; -- ";
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          schemas.createSchema(sqlInjection, comment, properties);
-        });
+        () -> schemas.createSchema(sqlInjection, comment, properties));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          schemas.dropSchema(sqlInjection, false);
-        });
+        IllegalArgumentException.class, () -> schemas.dropSchema(sqlInjection, false));
 
     String sqlInjection1 = databaseName + "`; SLEEP(10); -- ";
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          schemas.createSchema(sqlInjection1, comment, properties);
-        });
+        () -> schemas.createSchema(sqlInjection1, comment, properties));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          schemas.dropSchema(sqlInjection1, false);
-        });
+        IllegalArgumentException.class, () -> schemas.dropSchema(sqlInjection1, false));
 
     String sqlInjection2 =
         databaseName + "`; UPDATE Users SET password = 'newpassword' WHERE username = 'admin'; -- ";
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          schemas.createSchema(sqlInjection2, comment, properties);
-        });
+        () -> schemas.createSchema(sqlInjection2, comment, properties));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          schemas.dropSchema(sqlInjection2, false);
-        });
+        IllegalArgumentException.class, () -> schemas.dropSchema(sqlInjection2, false));
 
     // should throw an exception with input that has more than 64 characters
     String invalidInput = StringUtils.repeat("a", 65);
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          schemas.createSchema(invalidInput, comment, properties);
-        });
+        () -> schemas.createSchema(invalidInput, comment, properties));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          schemas.dropSchema(invalidInput, false);
-        });
+        IllegalArgumentException.class, () -> schemas.dropSchema(invalidInput, false));
   }
 
   @Test
@@ -333,6 +357,7 @@ public class CatalogDorisIT extends AbstractIT {
         };
 
     Map<String, String> properties = createTableProperties();
+    Transform[] partitions = createRangePartition();
     TableCatalog tableCatalog = catalog.asTableCatalog();
     Table createdTable =
         tableCatalog.createTable(
@@ -340,7 +365,7 @@ public class CatalogDorisIT extends AbstractIT {
             columns,
             table_comment,
             properties,
-            Transforms.EMPTY_TRANSFORM,
+            partitions,
             distribution,
             null,
             indexes);
@@ -377,22 +402,18 @@ public class CatalogDorisIT extends AbstractIT {
 
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          tableCatalog.createTable(
-              tableIdentifier,
-              columns,
-              table_comment,
-              properties,
-              Transforms.EMPTY_TRANSFORM,
-              Distributions.NONE,
-              new SortOrder[0],
-              t1_indexes);
-        });
+        () ->
+            tableCatalog.createTable(
+                tableIdentifier,
+                columns,
+                table_comment,
+                properties,
+                Transforms.EMPTY_TRANSFORM,
+                Distributions.NONE,
+                new SortOrder[0],
+                t1_indexes));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          catalog.asTableCatalog().dropTable(tableIdentifier);
-        });
+        IllegalArgumentException.class, () -> catalog.asTableCatalog().dropTable(tableIdentifier));
 
     String t2_name = table_name + "`; SLEEP(10); -- ";
     Column t2_col = Column.of(t2_name, Types.LongType.get(), "id", false, false, null);
@@ -403,22 +424,18 @@ public class CatalogDorisIT extends AbstractIT {
 
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          tableCatalog.createTable(
-              tableIdentifier2,
-              columns2,
-              table_comment,
-              properties,
-              Transforms.EMPTY_TRANSFORM,
-              Distributions.NONE,
-              new SortOrder[0],
-              t2_indexes);
-        });
+        () ->
+            tableCatalog.createTable(
+                tableIdentifier2,
+                columns2,
+                table_comment,
+                properties,
+                Transforms.EMPTY_TRANSFORM,
+                Distributions.NONE,
+                new SortOrder[0],
+                t2_indexes));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          catalog.asTableCatalog().dropTable(tableIdentifier2);
-        });
+        IllegalArgumentException.class, () -> catalog.asTableCatalog().dropTable(tableIdentifier2));
 
     String t3_name =
         table_name + "`; UPDATE Users SET password = 'newpassword' WHERE username = 'admin'; -- ";
@@ -430,22 +447,18 @@ public class CatalogDorisIT extends AbstractIT {
 
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          tableCatalog.createTable(
-              tableIdentifier3,
-              columns3,
-              table_comment,
-              properties,
-              Transforms.EMPTY_TRANSFORM,
-              Distributions.NONE,
-              new SortOrder[0],
-              t3_indexes);
-        });
+        () ->
+            tableCatalog.createTable(
+                tableIdentifier3,
+                columns3,
+                table_comment,
+                properties,
+                Transforms.EMPTY_TRANSFORM,
+                Distributions.NONE,
+                new SortOrder[0],
+                t3_indexes));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          catalog.asTableCatalog().dropTable(tableIdentifier3);
-        });
+        IllegalArgumentException.class, () -> catalog.asTableCatalog().dropTable(tableIdentifier3));
 
     String invalidInput = StringUtils.repeat("a", 65);
     Column t4_col = Column.of(invalidInput, Types.LongType.get(), "id", false, false, null);
@@ -456,22 +469,18 @@ public class CatalogDorisIT extends AbstractIT {
 
     Assertions.assertThrows(
         IllegalArgumentException.class,
-        () -> {
-          tableCatalog.createTable(
-              tableIdentifier4,
-              columns4,
-              table_comment,
-              properties,
-              Transforms.EMPTY_TRANSFORM,
-              Distributions.NONE,
-              new SortOrder[0],
-              t4_indexes);
-        });
+        () ->
+            tableCatalog.createTable(
+                tableIdentifier4,
+                columns4,
+                table_comment,
+                properties,
+                Transforms.EMPTY_TRANSFORM,
+                Distributions.NONE,
+                new SortOrder[0],
+                t4_indexes));
     Assertions.assertThrows(
-        IllegalArgumentException.class,
-        () -> {
-          catalog.asTableCatalog().dropTable(tableIdentifier4);
-        });
+        IllegalArgumentException.class, () -> catalog.asTableCatalog().dropTable(tableIdentifier4));
   }
 
   @Test
@@ -488,6 +497,7 @@ public class CatalogDorisIT extends AbstractIT {
         };
 
     Map<String, String> properties = createTableProperties();
+    Transform[] partitions = createListPartition();
     TableCatalog tableCatalog = catalog.asTableCatalog();
     Table createdTable =
         tableCatalog.createTable(
@@ -495,7 +505,7 @@ public class CatalogDorisIT extends AbstractIT {
             columns,
             table_comment,
             properties,
-            Transforms.EMPTY_TRANSFORM,
+            partitions,
             distribution,
             null,
             indexes);
@@ -536,7 +546,26 @@ public class CatalogDorisIT extends AbstractIT {
     tableCatalog.alterTable(
         tableIdentifier,
         TableChange.addColumn(
-            new String[] {"col_4"}, Types.VarCharType.of(255), "col_4_comment", true));
+            new String[] {"col_5"}, Types.VarCharType.of(255), "col_5_comment", true));
+    Awaitility.await()
+        .atMost(MAX_WAIT_IN_SECONDS, TimeUnit.SECONDS)
+        .pollInterval(WAIT_INTERVAL_IN_SECONDS, TimeUnit.SECONDS)
+        .untilAsserted(
+            () ->
+                Assertions.assertEquals(
+                    5, tableCatalog.loadTable(tableIdentifier).columns().length));
+
+    ITUtils.assertColumn(
+        Column.of("col_5", Types.VarCharType.of(255), "col_5_comment"),
+        tableCatalog.loadTable(tableIdentifier).columns()[4]);
+
+    // change column position
+    // TODO: change column position is unstable, add it later
+
+    // drop column
+    tableCatalog.alterTable(
+        tableIdentifier, TableChange.deleteColumn(new String[] {"col_5"}, true));
+
     Awaitility.await()
         .atMost(MAX_WAIT_IN_SECONDS, TimeUnit.SECONDS)
         .pollInterval(WAIT_INTERVAL_IN_SECONDS, TimeUnit.SECONDS)
@@ -544,25 +573,6 @@ public class CatalogDorisIT extends AbstractIT {
             () ->
                 Assertions.assertEquals(
                     4, tableCatalog.loadTable(tableIdentifier).columns().length));
-
-    ITUtils.assertColumn(
-        Column.of("col_4", Types.VarCharType.of(255), "col_4_comment"),
-        tableCatalog.loadTable(tableIdentifier).columns()[3]);
-
-    // change column position
-    // TODO: change column position is unstable, add it later
-
-    // drop column
-    tableCatalog.alterTable(
-        tableIdentifier, TableChange.deleteColumn(new String[] {"col_4"}, true));
-
-    Awaitility.await()
-        .atMost(MAX_WAIT_IN_SECONDS, TimeUnit.SECONDS)
-        .pollInterval(WAIT_INTERVAL_IN_SECONDS, TimeUnit.SECONDS)
-        .untilAsserted(
-            () ->
-                Assertions.assertEquals(
-                    3, tableCatalog.loadTable(tableIdentifier).columns().length));
   }
 
   @Test
