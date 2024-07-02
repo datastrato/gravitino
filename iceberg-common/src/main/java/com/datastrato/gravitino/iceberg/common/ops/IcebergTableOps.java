@@ -13,6 +13,7 @@ import java.sql.Driver;
 import java.sql.DriverManager;
 import java.util.Collections;
 import java.util.Optional;
+import lombok.Getter;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SupportsNamespaces;
@@ -35,7 +36,7 @@ import org.slf4j.LoggerFactory;
 public class IcebergTableOps implements AutoCloseable {
   public static final Logger LOG = LoggerFactory.getLogger(IcebergTableOps.class);
 
-  protected Catalog catalog;
+  @Getter protected Catalog catalog;
   private SupportsNamespaces asNamespaceCatalog;
   private final String catalogType;
   private String catalogUri = null;

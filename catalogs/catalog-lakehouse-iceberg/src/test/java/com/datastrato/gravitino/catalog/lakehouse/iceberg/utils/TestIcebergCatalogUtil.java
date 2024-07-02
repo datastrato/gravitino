@@ -6,7 +6,7 @@
 package com.datastrato.gravitino.catalog.lakehouse.iceberg.utils;
 
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.IcebergCatalogPropertiesMetadata;
-import com.datastrato.gravitino.catalog.lakehouse.iceberg.IcebergConfig;
+import com.datastrato.gravitino.iceberg.common.IcebergConfig;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.iceberg.CatalogProperties;

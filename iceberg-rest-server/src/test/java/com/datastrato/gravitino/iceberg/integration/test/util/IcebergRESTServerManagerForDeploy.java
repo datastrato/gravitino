@@ -25,7 +25,7 @@ public class IcebergRESTServerManagerForDeploy extends IcebergRESTServerManager 
   public IcebergRESTServerManagerForDeploy() {
     String gravitinoRootDir = System.getenv("GRAVITINO_ROOT_DIR");
     this.icebergRESTServerHome =
-        Paths.get(gravitinoRootDir, "distribution", "gravitino-iceberg-rest-server");
+        Paths.get(gravitinoRootDir, "distribution", "package", "extensions", "iceberg-rest-server");
   }
 
   @Override

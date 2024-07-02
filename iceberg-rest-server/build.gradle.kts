@@ -149,6 +149,6 @@ tasks {
   register("copyLibs", Copy::class) {
     dependsOn(copyDepends, "build")
     from("build/libs")
-    into("$rootDir/distribution/${rootProject.name}-iceberg-rest-server/libs")
+    into("$rootDir/distribution/package/extensions/iceberg-rest-server/libs")
   }
 }

@@ -6,6 +6,7 @@ package com.datastrato.gravitino.catalog.lakehouse.iceberg.ops;
 
 import com.datastrato.gravitino.NameIdentifier;
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.ops.IcebergTableOpsHelper.IcebergTableChange;
+import com.datastrato.gravitino.iceberg.common.ops.IcebergTableOps;
 import com.datastrato.gravitino.rel.TableChange;
 import com.datastrato.gravitino.rel.TableChange.ColumnPosition;
 import com.datastrato.gravitino.rel.types.Types;

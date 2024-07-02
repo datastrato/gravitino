@@ -9,7 +9,6 @@ import static com.datastrato.gravitino.connector.BaseCatalog.CATALOG_BYPASS_PREF
 import com.datastrato.gravitino.NameIdentifier;
 import com.datastrato.gravitino.Namespace;
 import com.datastrato.gravitino.SchemaChange;
-import com.datastrato.gravitino.catalog.lakehouse.iceberg.ops.IcebergTableOps;
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.ops.IcebergTableOpsHelper;
 import com.datastrato.gravitino.connector.CatalogInfo;
 import com.datastrato.gravitino.connector.CatalogOperations;
@@ -21,6 +20,8 @@ import com.datastrato.gravitino.exceptions.NoSuchTableException;
 import com.datastrato.gravitino.exceptions.NonEmptySchemaException;
 import com.datastrato.gravitino.exceptions.SchemaAlreadyExistsException;
 import com.datastrato.gravitino.exceptions.TableAlreadyExistsException;
+import com.datastrato.gravitino.iceberg.common.IcebergConfig;
+import com.datastrato.gravitino.iceberg.common.ops.IcebergTableOps;
 import com.datastrato.gravitino.meta.AuditInfo;
 import com.datastrato.gravitino.rel.Column;
 import com.datastrato.gravitino.rel.Table;
@@ -44,6 +45,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
 import org.apache.iceberg.exceptions.NamespaceNotEmptyException;
@@ -58,6 +60,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Operations for interacting with the Iceberg catalog in Gravitino. */
+@SuppressWarnings("UnusedVariable")
 public class IcebergCatalogOperations implements CatalogOperations, SupportsSchemas, TableCatalog {
 
   private static final String ICEBERG_TABLE_DOES_NOT_EXIST_MSG = "Iceberg table does not exist: %s";
@@ -96,7 +99,7 @@ public class IcebergCatalogOperations implements CatalogOperations, SupportsSche
     IcebergConfig icebergConfig = new IcebergConfig(resultConf);
 
     this.icebergTableOps = new IcebergTableOps(icebergConfig);
-    this.icebergTableOpsHelper = icebergTableOps.createIcebergTableOpsHelper();
+    this.icebergTableOpsHelper = new IcebergTableOpsHelper(icebergTableOps.getCatalog());
   }
 
   /** Closes the Iceberg catalog and releases the associated client pool. */
@@ -392,7 +395,10 @@ public class IcebergCatalogOperations implements CatalogOperations, SupportsSche
       IcebergTableOpsHelper.IcebergTableChange icebergTableChange =
           icebergTableOpsHelper.buildIcebergTableChanges(
               NameIdentifier.of(levels[levels.length - 1], tableIdent.name()), changes);
-      LoadTableResponse loadTableResponse = icebergTableOps.updateTable(icebergTableChange);
+      Transaction transaction = icebergTableChange.getTransaction();
+      transaction.commitTransaction();
+      LoadTableResponse loadTableResponse =
+          icebergTableOps.loadTable(icebergTableChange.getTableIdentifier());
       loadTableResponse.validate();
       return IcebergTable.fromIcebergTable(loadTableResponse.tableMetadata(), tableIdent.name());
     } catch (org.apache.iceberg.exceptions.NoSuchTableException e) {

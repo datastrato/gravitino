@@ -14,7 +14,6 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.apache.commons.io.FileUtils;
 
 public class IcebergRESTServerManagerForEmbedded extends IcebergRESTServerManager {
 
@@ -29,6 +28,7 @@ public class IcebergRESTServerManagerForEmbedded extends IcebergRESTServerManage
       throw new RuntimeException(e);
     }
     mockConfDir.mkdirs();
+    mockConfDir.deleteOnExit();
     this.executor = Executors.newSingleThreadExecutor();
   }
 
@@ -60,10 +60,5 @@ public class IcebergRESTServerManagerForEmbedded extends IcebergRESTServerManage
   @Override
   public void doStopIcebergRESTServer() {
     executor.shutdownNow();
-    try {
-      FileUtils.deleteDirectory(mockConfDir);
-    } catch (Exception e) {
-      // Ignore
-    }
   }
 }

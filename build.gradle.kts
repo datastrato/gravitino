@@ -547,26 +547,16 @@ tasks {
   val compileIcebergRESTServer by registering {
     dependsOn("iceberg-rest-server:copyLibs")
     group = "Iceberg REST server distribution"
-    outputs.dir(projectDir.dir("distribution/${rootProject.name}-iceberg-rest-server"))
+    outputs.dir(projectDir.dir("distribution/package/extensions/iceberg-rest-server"))
     doLast {
       copy {
-        from(projectDir.dir("conf")) { into("${rootProject.name}-iceberg-rest-server/conf") }
-        from(projectDir.dir("bin")) { into("${rootProject.name}-iceberg-rest-server/bin") }
+        from(projectDir.dir("conf")) { into("package/extensions/iceberg-rest-server/conf") }
+        from(projectDir.dir("bin")) { into("package/extensions/iceberg-rest-server/bin") }
         into(outputDir)
         rename { fileName ->
           fileName.replace(".template", "")
         }
         fileMode = 0b111101101
-      }
-      copy {
-        from(projectDir.dir("licenses")) { into("${rootProject.name}-iceberg-rest-server/licenses") }
-        from(projectDir.file("LICENSE.bin")) { into("${rootProject.name}-iceberg-rest-server") }
-        from(projectDir.file("NOTICE.bin")) { into("${rootProject.name}-iceberg-rest-server") }
-        from(projectDir.file("README.md")) { into("${rootProject.name}-iceberg-rest-server") }
-        into(outputDir)
-        rename { fileName ->
-          fileName.replace(".bin", "")
-        }
       }
     }
   }
