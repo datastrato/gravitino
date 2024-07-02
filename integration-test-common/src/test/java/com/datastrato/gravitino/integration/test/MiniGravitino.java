@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
  * the same JVM process.
  */
 public class MiniGravitino {
+
   private static final Logger LOG = LoggerFactory.getLogger(MiniGravitino.class);
   private MiniGravitinoContext context;
   private RESTClient restClient;
@@ -194,6 +195,10 @@ public class MiniGravitino {
     LOG.debug("MiniGravitino terminated.");
   }
 
+  public void startIcebergRESTServer() {}
+
+  public void stopIcebergRESTServer() {}
+
   public Config getServerConfig() {
     return serverConfig;
   }
@@ -201,16 +206,13 @@ public class MiniGravitino {
   Map<String, String> getIcebergRestServiceConfigs() throws IOException {
     Map<String, String> customConfigs = new HashMap<>();
 
-    String icebergJarPath =
-        Paths.get("catalogs", "catalog-lakehouse-iceberg", "build", "libs").toString();
-    String icebergConfigPath =
-        Paths.get("catalogs", "catalog-lakehouse-iceberg", "src", "main", "resources").toString();
+    String icebergJarPath = Paths.get("iceberg-rest-server", "build", "libs").toString();
     customConfigs.put(
         AuxiliaryServiceManager.GRAVITINO_AUX_SERVICE_PREFIX
             + "iceberg-rest"
             + "."
             + AuxiliaryServiceManager.AUX_SERVICE_CLASSPATH,
-        String.join(",", icebergJarPath, icebergConfigPath));
+        icebergJarPath);
 
     customConfigs.put(
         AuxiliaryServiceManager.GRAVITINO_AUX_SERVICE_PREFIX

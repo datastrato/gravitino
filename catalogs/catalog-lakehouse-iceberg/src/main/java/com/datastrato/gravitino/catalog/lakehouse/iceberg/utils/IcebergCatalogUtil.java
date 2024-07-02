@@ -9,10 +9,10 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION;
 
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.IcebergCatalogBackend;
-import com.datastrato.gravitino.catalog.lakehouse.iceberg.IcebergConfig;
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.authentication.AuthenticationConfig;
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.authentication.kerberos.HiveBackendProxy;
 import com.datastrato.gravitino.catalog.lakehouse.iceberg.authentication.kerberos.KerberosClient;
+import com.datastrato.gravitino.iceberg.common.IcebergConfig;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;

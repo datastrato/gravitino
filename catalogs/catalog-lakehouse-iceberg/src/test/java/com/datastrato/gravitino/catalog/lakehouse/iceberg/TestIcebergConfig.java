@@ -5,6 +5,7 @@
 
 package com.datastrato.gravitino.catalog.lakehouse.iceberg;
 
+import com.datastrato.gravitino.iceberg.common.IcebergConfig;
 import com.datastrato.gravitino.server.web.JettyServerConfig;
 import com.google.common.collect.ImmutableMap;
 import java.util.Map;

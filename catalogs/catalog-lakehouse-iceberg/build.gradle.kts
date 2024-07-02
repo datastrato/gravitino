@@ -20,6 +20,7 @@ dependencies {
   implementation(project(":api"))
   implementation(project(":common"))
   implementation(project(":core"))
+  implementation(project(":iceberg-common"))
   implementation(project(":server-common"))
   implementation(libs.bundles.iceberg)
   implementation(libs.bundles.jetty)
