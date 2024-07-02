@@ -124,22 +124,37 @@ class HTTPClient:
             raise exc from None
 
     def _request(
-        self, method, endpoint, params=None, json=None, headers=None, timeout=None
+        self,
+        method,
+        endpoint,
+        params=None,
+        json=None,
+        data=None,
+        headers=None,
+        timeout=None,
     ):
         method = method.upper()
         request_data = None
 
         if headers:
             self._update_headers(headers)
+
+        if data:
+            request_data = urlencode(data.to_dict()).encode()
+            headers = {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/vnd.gravitino.v1+json",
+            }
+            self._update_headers(headers)
         else:
+            if json:
+                request_data = json.to_json().encode("utf-8")
+
             headers = {
                 "Content-Type": "application/json",
                 "Accept": "application/vnd.gravitino.v1+json",
             }
             self._update_headers(headers)
-
-        if json:
-            request_data = json.to_json().encode("utf-8")
 
         opener = build_opener()
         request = Request(self._build_url(endpoint, params), data=request_data)
@@ -164,6 +179,9 @@ class HTTPClient:
 
     def post(self, endpoint, json=None, **kwargs):
         return self._request("post", endpoint, json=json, **kwargs)
+
+    def post_form(self, endpoint, data=None, **kwargs):
+        return self._request("post", endpoint, data=data, **kwargs)
 
     def put(self, endpoint, json=None, **kwargs):
         return self._request("put", endpoint, json=json, **kwargs)
