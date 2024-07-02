@@ -6,7 +6,6 @@
 package com.datastrato.gravitino.storage.relational.utils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.datastrato.gravitino.Catalog;
@@ -891,11 +890,8 @@ public class TestPOConverters {
         .build();
   }
 
-  private static TagPO createTagPO(
-      Long id,
-      String name,
-      Long metalakeId,
-      String comment) throws JsonProcessingException {
+  private static TagPO createTagPO(Long id, String name, Long metalakeId, String comment)
+      throws JsonProcessingException {
     AuditInfo auditInfo =
         AuditInfo.builder().withCreator("creator").withCreateTime(FIX_INSTANT).build();
     Map<String, String> properties = ImmutableMap.of("key", "value");
@@ -912,11 +908,7 @@ public class TestPOConverters {
         .build();
   }
 
-  private static TagEntity createTag(
-      Long id,
-      String name,
-      Namespace namespace,
-      String comment) {
+  private static TagEntity createTag(Long id, String name, Namespace namespace, String comment) {
     AuditInfo auditInfo =
         AuditInfo.builder().withCreator("creator").withCreateTime(FIX_INSTANT).build();
     Map<String, String> properties = ImmutableMap.of("key", "value");
