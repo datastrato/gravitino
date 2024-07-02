@@ -12,6 +12,7 @@ import com.datastrato.gravitino.integration.test.container.ContainerSuite;
 import com.datastrato.gravitino.integration.test.container.HiveContainer;
 import com.datastrato.gravitino.integration.test.util.AbstractIT;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.errorprone.annotations.FormatMethod;
 import com.google.errorprone.annotations.FormatString;
 import java.io.IOException;
@@ -139,6 +140,24 @@ public abstract class FlinkEnvIT extends AbstractIT {
   @FormatMethod
   protected TableResult sql(@FormatString String sql, Object... args) {
     return tableEnv.executeSql(String.format(sql, args));
+  }
+
+  protected static void doWithSchema(
+      Catalog catalog, String schemaName, Consumer<Catalog> action, boolean dropSchema) {
+    Preconditions.checkNotNull(catalog);
+    Preconditions.checkNotNull(schemaName);
+    try {
+      tableEnv.useCatalog(catalog.name());
+      if (!catalog.asSchemas().schemaExists(schemaName)) {
+        catalog.asSchemas().createSchema(schemaName, null, ImmutableMap.of());
+      }
+      tableEnv.useDatabase(schemaName);
+      action.accept(catalog);
+    } finally {
+      if (dropSchema) {
+        catalog.asSchemas().dropSchema(schemaName, true);
+      }
+    }
   }
 
   protected static void doWithCatalog(Catalog catalog, Consumer<Catalog> action) {
