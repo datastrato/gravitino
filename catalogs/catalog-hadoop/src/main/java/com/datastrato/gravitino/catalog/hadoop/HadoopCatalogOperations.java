@@ -17,6 +17,7 @@ import com.datastrato.gravitino.SchemaChange;
 import com.datastrato.gravitino.StringIdentifier;
 import com.datastrato.gravitino.catalog.hadoop.authentication.AuthenticationConfig;
 import com.datastrato.gravitino.catalog.hadoop.authentication.kerberos.KerberosClient;
+import com.datastrato.gravitino.catalog.hadoop.authentication.kerberos.KerberosConfig;
 import com.datastrato.gravitino.connector.CatalogInfo;
 import com.datastrato.gravitino.connector.CatalogOperations;
 import com.datastrato.gravitino.connector.HasPropertyMetadata;
@@ -39,7 +40,9 @@ import com.datastrato.gravitino.meta.SchemaEntity;
 import com.datastrato.gravitino.utils.PrincipalUtils;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
@@ -82,6 +85,14 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
 
   private CatalogInfo catalogInfo;
 
+  private final List<Closeable> closeables = Lists.newArrayList();
+
+  private final Map<NameIdentifier, UserInfo> userInfoMap = Maps.newConcurrentMap();
+
+  public static final String GRAVITINO_KEYTAB_FORMAT = "keytabs/gravitino-%s";
+
+  private final ThreadLocal<String> currentUser = ThreadLocal.withInitial(() -> null);
+
   HadoopCatalogOperations(EntityStore store) {
     this.store = store;
   }
@@ -92,6 +103,38 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
 
   public String getKerberosRealm() {
     return kerberosRealm;
+  }
+
+  public EntityStore getStore() {
+    return store;
+  }
+
+  public void setCurrentUser(String userName) {
+    currentUser.set(userName);
+  }
+
+  public Map<NameIdentifier, UserInfo> getUserInfoMap() {
+    return userInfoMap;
+  }
+
+  static class UserInfo {
+    UserGroupInformation loginUser;
+    boolean enableUserImpersonation;
+    String keytabPath;
+    String realm;
+
+    static UserInfo of(
+        UserGroupInformation loginUser,
+        boolean enableUserImpersonation,
+        String keytabPath,
+        String kerberosRealm) {
+      UserInfo userInfo = new UserInfo();
+      userInfo.loginUser = loginUser;
+      userInfo.enableUserImpersonation = enableUserImpersonation;
+      userInfo.keytabPath = keytabPath;
+      userInfo.realm = kerberosRealm;
+      return userInfo;
+    }
   }
 
   @Override
@@ -125,20 +168,20 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
 
   private void initAuthentication(Map<String, String> conf, Configuration hadoopConf) {
     AuthenticationConfig config = new AuthenticationConfig(conf);
-    String authType = config.getAuthType();
 
-    if (StringUtils.equalsIgnoreCase(authType, AuthenticationMethod.KERBEROS.name())) {
-      hadoopConf.set(
-          HADOOP_SECURITY_AUTHENTICATION,
-          AuthenticationMethod.KERBEROS.name().toLowerCase(Locale.ROOT));
-      UserGroupInformation.setConfiguration(hadoopConf);
-      try {
-        KerberosClient kerberosClient = new KerberosClient(conf, hadoopConf);
-        File keytabFile = kerberosClient.saveKeyTabFileFromUri(catalogInfo.id());
-        this.kerberosRealm = kerberosClient.login(keytabFile.getAbsolutePath());
-      } catch (IOException e) {
-        throw new RuntimeException("Failed to login with Kerberos", e);
-      }
+    if (config.isKerberosAuth()) {
+      this.kerberosRealm =
+          initKerberos(
+              conf, hadoopConf, NameIdentifier.of(catalogInfo.namespace(), catalogInfo.name()));
+    } else if (config.isSimpleAuth()) {
+      // TODO: change the user 'datastrato' to 'anonymous' and uncomment the following code;
+      //  uncomment the following code after the user 'datastrato' is removed from the codebase.
+      //  for more, please see https://github.com/datastrato/gravitino/issues/4013
+      // UserGroupInformation u =
+      //    UserGroupInformation.createRemoteUser(PrincipalUtils.getCurrentUserName());
+      // userInfoMap.put(
+      //    NameIdentifier.of(catalogInfo.namespace(), catalogInfo.name()),
+      //    UserInfo.of(u, false, null, null));
     }
   }
 
@@ -190,6 +233,11 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
       String storageLocation,
       Map<String, String> properties)
       throws NoSuchSchemaException, FilesetAlreadyExistsException {
+
+    String apiUser =
+        currentUser.get() == null ? PrincipalUtils.getCurrentUserName() : currentUser.get();
+
+    // Reset the current user based on the name identifier.
     try {
       if (store.exists(ident, Entity.EntityType.FILESET)) {
         throw new FilesetAlreadyExistsException("Fileset %s already exists", ident);
@@ -214,8 +262,8 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
           "Storage location must be set for external fileset " + ident);
     }
 
-    // Either catalog property "location", or schema property "location", or storageLocation must be
-    // set for managed fileset.
+    // Either catalog property "location", or schema property "location", or
+    // storageLocation must be set for managed fileset.
     Path schemaPath = getSchemaPath(schemaIdent.name(), schemaEntity.properties());
     if (schemaPath == null && StringUtils.isBlank(storageLocation)) {
       throw new IllegalArgumentException(
@@ -260,16 +308,14 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
             .withNamespace(ident.namespace())
             .withComment(comment)
             .withFilesetType(type)
-            // Store the storageLocation to the store. If the "storageLocation" is null for
+            // Store the storageLocation to the store. If the "storageLocation" is null
+            // for
             // managed fileset, Gravitino will get and store the location based on the
             // catalog/schema's location and store it to the store.
             .withStorageLocation(filesetPath.toString())
             .withProperties(properties)
             .withAuditInfo(
-                AuditInfo.builder()
-                    .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
-                    .withCreateTime(Instant.now())
-                    .build())
+                AuditInfo.builder().withCreator(apiUser).withCreateTime(Instant.now()).build())
             .build();
 
     try {
@@ -370,9 +416,56 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
     }
   }
 
+  /**
+   * Get the UserGroupInformation based on the NameIdentifier and properties.
+   *
+   * <p>Note: As UserGroupInformation is a static class, to avoid the thread safety issue, we need
+   * to use synchronized to ensure the thread safety: Make login and getLoginUser atomic.
+   */
+  public synchronized String initKerberos(
+      Map<String, String> properties, Configuration configuration, NameIdentifier ident) {
+    // Init schema level kerberos authentication.
+    String keytabPath =
+        String.format(
+            GRAVITINO_KEYTAB_FORMAT, catalogInfo.id() + "-" + ident.toString().replace(".", "-"));
+    KerberosConfig kerberosConfig = new KerberosConfig(properties);
+    if (kerberosConfig.isKerberosAuth()) {
+      configuration.set(
+          HADOOP_SECURITY_AUTHENTICATION,
+          AuthenticationMethod.KERBEROS.name().toLowerCase(Locale.ROOT));
+      UserGroupInformation.setConfiguration(configuration);
+
+      try {
+        KerberosClient kerberosClient = new KerberosClient(properties, configuration);
+        // Add the kerberos client to the closable to close resources.
+        closeables.add(kerberosClient);
+
+        File keytabFile = kerberosClient.saveKeyTabFileFromUri(keytabPath);
+        kerberosRealm = kerberosClient.login(keytabFile.getAbsolutePath());
+        // Should this kerberosRealm need to be equals to the realm in the principal?
+        userInfoMap.put(
+            ident,
+            UserInfo.of(
+                UserGroupInformation.getLoginUser(),
+                kerberosConfig.isImpersonationEnabled(),
+                keytabPath,
+                kerberosRealm));
+        return kerberosRealm;
+      } catch (IOException e) {
+        throw new RuntimeException("Failed to login with Kerberos", e);
+      }
+    }
+
+    return null;
+  }
+
   @Override
   public Schema createSchema(NameIdentifier ident, String comment, Map<String, String> properties)
       throws NoSuchCatalogException, SchemaAlreadyExistsException {
+
+    String apiUser =
+        currentUser.get() == null ? PrincipalUtils.getCurrentUserName() : currentUser.get();
+
     try {
       if (store.exists(ident, Entity.EntityType.SCHEMA)) {
         throw new SchemaAlreadyExistsException("Schema %s already exists", ident);
@@ -413,10 +506,7 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
             .withComment(comment)
             .withProperties(properties)
             .withAuditInfo(
-                AuditInfo.builder()
-                    .withCreator(PrincipalUtils.getCurrentPrincipal().getName())
-                    .withCreateTime(Instant.now())
-                    .build())
+                AuditInfo.builder().withCreator(apiUser).withCreateTime(Instant.now()).build())
             .build();
     try {
       store.put(schemaEntity, true /* overwrite */);
@@ -518,14 +608,23 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
 
       LOG.info("Deleted schema {} location {}", ident, schemaPath);
       return true;
-
     } catch (IOException ioe) {
       throw new RuntimeException("Failed to delete schema " + ident + " location", ioe);
     }
   }
 
   @Override
-  public void close() throws IOException {}
+  public void close() throws IOException {
+    userInfoMap.clear();
+    closeables.forEach(
+        c -> {
+          try {
+            c.close();
+          } catch (IOException e) {
+            LOG.error("Failed to close resource", e);
+          }
+        });
+  }
 
   private SchemaEntity updateSchemaEntity(
       NameIdentifier ident, SchemaEntity schemaEntity, SchemaChange... changes) {
