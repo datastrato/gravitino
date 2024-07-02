@@ -12,6 +12,8 @@ import sys
 
 import requests
 
+from gravitino.exceptions.gravitino_runtime_exception import GravitinoRuntimeException
+
 logger = logging.getLogger(__name__)
 
 
@@ -118,3 +120,78 @@ class IntegrationTestEnv(unittest.TestCase):
 
         if gravitino_server_running:
             logger.error("Can't stop Gravitino server!")
+
+    @classmethod
+    def restart_server(cls):
+        logger.info("Restarting Gravitino server...")
+        gravitino_home = os.environ.get("GRAVITINO_HOME")
+        gravitino_startup_script = os.path.join(gravitino_home, "bin/gravitino.sh")
+        if not os.path.exists(gravitino_startup_script):
+            raise GravitinoRuntimeException(
+                f"Can't find Gravitino startup script: {gravitino_startup_script}, "
+                "Please execute `./gradlew compileDistribution -x test` in the Gravitino "
+                "project root directory."
+            )
+
+        # Restart Gravitino Server
+        env_vars = os.environ.copy()
+        env_vars["HADOOP_USER_NAME"] = "datastrato"
+        result = subprocess.run(
+            [gravitino_startup_script, "restart"],
+            env=env_vars,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.stdout:
+            logger.info("stdout: %s", result.stdout)
+        if result.stderr:
+            logger.info("stderr: %s", result.stderr)
+
+        if not check_gravitino_server_status():
+            raise GravitinoRuntimeException("ERROR: Can't start Gravitino server!")
+
+    @classmethod
+    def _append_server_hadoop_conf(cls, config):
+        logger.info("Append server hadoop conf.")
+        gravitino_home = os.environ.get("GRAVITINO_HOME")
+        if gravitino_home is None:
+            raise GravitinoRuntimeException("Cannot find GRAVITINO_HOME env.")
+        hadoop_conf_path = f"{gravitino_home}/catalogs/hadoop/conf/hadoop.conf"
+        if not os.path.exists(hadoop_conf_path):
+            raise GravitinoRuntimeException(
+                f"Hadoop conf file is not found at `{hadoop_conf_path}`."
+            )
+
+        with open(hadoop_conf_path, mode="a", encoding="utf-8") as f:
+            for key, value in config.items():
+                f.write(f"\n{key} = {value}")
+
+    @classmethod
+    def _reset_server_hadoop_conf(cls, config):
+        logger.info("Reset server hadoop conf.")
+        gravitino_home = os.environ.get("GRAVITINO_HOME")
+        if gravitino_home is None:
+            raise GravitinoRuntimeException("Cannot find GRAVITINO_HOME env.")
+        hadoop_conf_path = f"{gravitino_home}/catalogs/hadoop/conf/hadoop.conf"
+        if not os.path.exists(hadoop_conf_path):
+            raise GravitinoRuntimeException(
+                f"Hadoop conf file is not found at `{hadoop_conf_path}`."
+            )
+        filtered_lines = []
+        with open(hadoop_conf_path, mode="r", encoding="utf-8") as file:
+            lines = file.readlines()
+            for line in lines:
+                line = line.strip()
+                find_config = False
+                for key, value in config.items():
+                    key_to_delete = f"{key} = {value}"
+                    if line.startswith(key_to_delete):
+                        find_config = True
+                        break
+                if find_config:
+                    continue
+                filtered_lines.append(line)
+
+        with open(hadoop_conf_path, mode="w", encoding="utf-8") as file:
+            file.writelines(filtered_lines)
