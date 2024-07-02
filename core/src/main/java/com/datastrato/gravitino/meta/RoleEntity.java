@@ -142,7 +142,7 @@ public class RoleEntity implements Role, Entity, Auditable, HasIdentifier {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, name, properties, auditInfo, securableObjects);
+    return Objects.hash(id, name, properties, auditInfo, securableObjects, namespace);
   }
 
   /**

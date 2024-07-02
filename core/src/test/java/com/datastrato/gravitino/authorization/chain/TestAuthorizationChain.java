@@ -1,0 +1,79 @@
+/*
+ * Copyright 2024 Datastrato Pvt Ltd.
+ * This software is licensed under the Apache License version 2.
+ */
+package com.datastrato.gravitino.authorization.chain;
+
+import com.datastrato.gravitino.Catalog;
+import com.datastrato.gravitino.Namespace;
+import com.datastrato.gravitino.TestCatalog;
+import com.datastrato.gravitino.authorization.AuthorizationHook;
+import com.datastrato.gravitino.authorization.chain.authorization1.TestAuthorizationHook1;
+import com.datastrato.gravitino.authorization.chain.authorization2.TestAuthorizationHook2;
+import com.datastrato.gravitino.connector.BaseCatalog;
+import com.datastrato.gravitino.meta.AuditInfo;
+import com.datastrato.gravitino.meta.CatalogEntity;
+import com.google.common.collect.ImmutableMap;
+import java.time.Instant;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+public class TestAuthorizationChain {
+  private static TestCatalog testCatalog1;
+  private static TestCatalog testCatalog2;
+
+  @BeforeAll
+  public static void setUp() throws Exception {
+    AuditInfo auditInfo =
+        AuditInfo.builder().withCreator("test").withCreateTime(Instant.now()).build();
+
+    CatalogEntity catalogTest1 =
+        CatalogEntity.builder()
+            .withId(1L)
+            .withName("catalog-test1")
+            .withNamespace(Namespace.of("default"))
+            .withType(Catalog.Type.RELATIONAL)
+            .withProperties(ImmutableMap.of(BaseCatalog.AUTHORIZATION_IMPL, "test1"))
+            .withProvider("test")
+            .withAuditInfo(auditInfo)
+            .build();
+
+    testCatalog1 =
+        new TestCatalog().withCatalogConf(ImmutableMap.of()).withCatalogEntity(catalogTest1);
+
+    CatalogEntity catalogTest2 =
+        CatalogEntity.builder()
+            .withId(2L)
+            .withName("catalog-test2")
+            .withNamespace(Namespace.of("default"))
+            .withType(Catalog.Type.RELATIONAL)
+            .withProperties(ImmutableMap.of(BaseCatalog.AUTHORIZATION_IMPL, "test2"))
+            .withProvider("test")
+            .withAuditInfo(auditInfo)
+            .build();
+
+    testCatalog2 =
+        new TestCatalog().withCatalogConf(ImmutableMap.of()).withCatalogEntity(catalogTest2);
+  }
+
+  @Test
+  public void testAuthorizationCatalog1() {
+    AuthorizationHook authHook1 = testCatalog1.getAuthorizationHook();
+    Assertions.assertInstanceOf(TestAuthorizationHook1.class, authHook1);
+    TestAuthorizationHook1 testAuthOps1 = (TestAuthorizationHook1) authHook1;
+    Assertions.assertFalse(testAuthOps1.callOnCreateRole1);
+    authHook1.onCreateRole(null, null);
+    Assertions.assertTrue(testAuthOps1.callOnCreateRole1);
+  }
+
+  @Test
+  public void testAuthorizationCatalog2() {
+    AuthorizationHook authHook2 = testCatalog2.getAuthorizationHook();
+    Assertions.assertInstanceOf(TestAuthorizationHook2.class, authHook2);
+    TestAuthorizationHook2 testAuthOps2 = (TestAuthorizationHook2) authHook2;
+    Assertions.assertFalse(testAuthOps2.callOnCreateRole2);
+    authHook2.onCreateRole(null, null);
+    Assertions.assertTrue(testAuthOps2.callOnCreateRole2);
+  }
+}

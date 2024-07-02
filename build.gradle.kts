@@ -474,6 +474,7 @@ tasks.rat {
     "**/NOTICE.*",
     "ROADMAP.md",
     "clients/client-python/.pytest_cache/*",
+    "clients/client-python/.venv/*",
     "clients/client-python/gravitino.egg-info/*",
     "clients/client-python/gravitino/utils/exceptions.py",
     "clients/client-python/gravitino/utils/http_client.py"
