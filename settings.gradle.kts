@@ -31,6 +31,8 @@ include(
   "clients:filesystem-hadoop3-runtime",
   "clients:client-python"
 )
+include("iceberg-rest-server")
+include("iceberg-common")
 include("trino-connector")
 include("spark-connector:spark-common")
 // kyuubi hive connector doesn't support 2.13 for Spark3.3
@@ -48,5 +50,3 @@ include("flink-connector")
 include("web")
 include("docs")
 include("integration-test-common")
-include("iceberg-rest-server")
-include("iceberg-common")

@@ -390,6 +390,17 @@ public class IcebergCatalogOperations implements CatalogOperations, SupportsSche
 
   private Table internalUpdateTable(NameIdentifier tableIdent, TableChange... changes)
       throws NoSuchTableException, IllegalArgumentException {
+    LoadTableResponse loadTableResponse =
+        updateTable(tableIdent, icebergTableOpsHelper, icebergTableOps, changes);
+    return IcebergTable.fromIcebergTable(loadTableResponse.tableMetadata(), tableIdent.name());
+  }
+
+  @VisibleForTesting
+  public static LoadTableResponse updateTable(
+      NameIdentifier tableIdent,
+      IcebergTableOpsHelper icebergTableOpsHelper,
+      IcebergTableOps icebergTableOps,
+      TableChange... changes) {
     try {
       String[] levels = tableIdent.namespace().levels();
       IcebergTableOpsHelper.IcebergTableChange icebergTableChange =
@@ -400,7 +411,7 @@ public class IcebergCatalogOperations implements CatalogOperations, SupportsSche
       LoadTableResponse loadTableResponse =
           icebergTableOps.loadTable(icebergTableChange.getTableIdentifier());
       loadTableResponse.validate();
-      return IcebergTable.fromIcebergTable(loadTableResponse.tableMetadata(), tableIdent.name());
+      return loadTableResponse;
     } catch (org.apache.iceberg.exceptions.NoSuchTableException e) {
       throw new NoSuchTableException(e, ICEBERG_TABLE_DOES_NOT_EXIST_MSG, tableIdent.name());
     }
