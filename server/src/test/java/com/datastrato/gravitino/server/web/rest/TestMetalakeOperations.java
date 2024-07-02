@@ -32,6 +32,9 @@ import com.datastrato.gravitino.meta.SchemaVersion;
 import com.datastrato.gravitino.metalake.MetalakeDispatcher;
 import com.datastrato.gravitino.metalake.MetalakeManager;
 import com.datastrato.gravitino.rest.RESTUtils;
+import com.datastrato.gravitino.server.web.mapper.JsonMappingExceptionMapper;
+import com.datastrato.gravitino.server.web.mapper.JsonParseExceptionMapper;
+import com.datastrato.gravitino.server.web.mapper.JsonProcessingExceptionMapper;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import java.io.IOException;
@@ -93,7 +96,9 @@ public class TestMetalakeOperations extends JerseyTest {
             bindFactory(MockServletRequestFactory.class).to(HttpServletRequest.class);
           }
         });
-
+    resourceConfig.register(JsonProcessingExceptionMapper.class);
+    resourceConfig.register(JsonParseExceptionMapper.class);
+    resourceConfig.register(JsonMappingExceptionMapper.class);
     return resourceConfig;
   }
 
@@ -178,6 +183,19 @@ public class TestMetalakeOperations extends JerseyTest {
     Assertions.assertEquals(ErrorConstants.ILLEGAL_ARGUMENTS_CODE, errorResponse.getCode());
     Assertions.assertEquals(
         IllegalArgumentException.class.getSimpleName(), errorResponse.getType());
+
+    String req2 = "{\"names\":\"metalake\",\"comment\":\"comment\",\"properties\":{}}";
+    Response resp2 =
+        target("/metalakes")
+            .request(MediaType.APPLICATION_JSON_TYPE)
+            .accept("application/vnd.gravitino.v1+json")
+            .post(Entity.entity(req2, MediaType.APPLICATION_JSON_TYPE));
+    Assertions.assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), resp2.getStatus());
+
+    ErrorResponse invalidJsonResponse = resp2.readEntity(ErrorResponse.class);
+    Assertions.assertEquals(ErrorConstants.ILLEGAL_ARGUMENTS_CODE, invalidJsonResponse.getCode());
+    Assertions.assertEquals(
+        IllegalArgumentException.class.getSimpleName(), invalidJsonResponse.getType());
   }
 
   @Test
