@@ -17,6 +17,7 @@ Simple mode is the default authentication option.
 Simple mode allows the client to use the environment variable `GRAVITINO_USER` as the user.
 
 If the environment variable `GRAVITINO_USER` isn't set, the client uses the user of the machine that sends requests.
+Additionally, the username can be directly used as a parameter to create a client.
 
 For the client side, users can enable `simple` mode by the following code:
 
@@ -24,6 +25,13 @@ For the client side, users can enable `simple` mode by the following code:
 GravitinoClient client = GravitinoClient.builder(uri)
     .withMetalake("metalake")
     .withSimpleAuth()
+    .build();
+```
+
+```java
+GravitinoClient client = GravitinoClient.builder(uri)
+    .withMetalake("metalake")
+    .withSimpleAuth("test_user_name")
     .build();
 ```
 
