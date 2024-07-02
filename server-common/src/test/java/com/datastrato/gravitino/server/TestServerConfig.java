@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class TestServerConfig {
+
   @Test
   public void checkGravitinoConfFile()
       throws NoSuchFieldException, IllegalAccessException, IOException {
@@ -32,7 +33,7 @@ public class TestServerConfig {
         getConfigEntryFromClass(JettyServerConfig.class).entrySet().stream()
             .collect(
                 Collectors.toMap(
-                    kv -> GravitinoServer.WEBSERVER_CONF_PREFIX + kv.getKey(),
+                    kv -> JettyServerConfig.GRAVITINO_SERVER_CONFIG_PREFIX + kv.getKey(),
                     Map.Entry::getValue));
     configKeyMap.putAll(jettyConfigMap);
 
