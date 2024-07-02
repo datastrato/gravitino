@@ -77,44 +77,6 @@ dependencies {
   testRuntimeOnly(libs.junit.jupiter.engine)
 }
 
-tasks {
-  val runtimeJars by registering(Copy::class) {
-    from(configurations.runtimeClasspath)
-    into("build/libs")
-  }
-
-  val copyCatalogLibs by registering(Copy::class) {
-    dependsOn("jar", "runtimeJars")
-    from("build/libs")
-    into("$rootDir/distribution/package/catalogs/lakehouse-iceberg/libs")
-  }
-
-  val copyCatalogConfig by registering(Copy::class) {
-    from("src/main/resources")
-    into("$rootDir/distribution/package/catalogs/lakehouse-iceberg/conf")
-
-    include("lakehouse-iceberg.conf")
-    include("core-site.xml.template")
-    include("hdfs-site.xml.template")
-
-    rename { original ->
-      if (original.endsWith(".template")) {
-        original.replace(".template", "")
-      } else {
-        original
-      }
-    }
-
-    exclude { details ->
-      details.file.isDirectory()
-    }
-  }
-
-  register("copyLibAndConfig", Copy::class) {
-    dependsOn(copyCatalogLibs, copyCatalogConfig)
-  }
-}
-
 tasks.test {
   val skipUTs = project.hasProperty("skipTests")
   if (skipUTs) {
