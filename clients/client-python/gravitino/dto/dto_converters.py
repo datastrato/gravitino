@@ -38,8 +38,10 @@ class DTOConverters:
 
     @staticmethod
     def to_catalog(catalog: CatalogDTO, client: HTTPClient):
+        namespace = catalog.namespace()
         if catalog.type() == Catalog.Type.FILESET:
             return FilesetCatalog(
+                namespace=namespace,
                 name=catalog.name(),
                 catalog_type=catalog.type(),
                 provider=catalog.provider(),

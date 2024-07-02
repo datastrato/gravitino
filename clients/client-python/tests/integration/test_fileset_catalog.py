@@ -73,26 +73,28 @@ class TestFilesetCatalog(IntegrationTestEnv):
             self.gravitino_client = GravitinoClient(
                 uri="http://localhost:8090", metalake_name=self.metalake_name
             )
-            catalog = self.gravitino_client.load_catalog(ident=self.catalog_ident)
+            catalog = self.gravitino_client.load_catalog(self.catalog_ident)
             logger.info(
                 "Drop fileset %s[%s]",
                 self.fileset_ident,
-                catalog.as_fileset_catalog().drop_fileset(ident=self.fileset_ident),
+                catalog.as_fileset_catalog().drop_fileset(self.fileset_ident),
             )
             logger.info(
                 "Drop fileset %s[%s]",
                 self.fileset_new_ident,
-                catalog.as_fileset_catalog().drop_fileset(ident=self.fileset_new_ident),
+                catalog.as_fileset_catalog().drop_fileset(self.fileset_new_ident),
             )
             logger.info(
                 "Drop schema %s[%s]",
                 self.schema_ident,
-                catalog.as_schemas().drop_schema(ident=self.schema_ident, cascade=True),
+                catalog.as_schemas().drop_schema(
+                    self.schema_ident.name(), cascade=True
+                ),
             )
             logger.info(
                 "Drop catalog %s[%s]",
                 self.catalog_ident,
-                self.gravitino_client.drop_catalog(ident=self.catalog_ident),
+                self.gravitino_client.drop_catalog(self.catalog_ident),
             )
             logger.info(
                 "Drop metalake %s[%s]",
@@ -117,11 +119,11 @@ class TestFilesetCatalog(IntegrationTestEnv):
             properties={self.catalog_location_prop: "/tmp/test1"},
         )
         catalog.as_schemas().create_schema(
-            ident=self.schema_ident, comment="", properties={}
+            schema_name=self.schema_ident.name(), comment="", properties={}
         )
 
     def create_fileset(self) -> Fileset:
-        catalog = self.gravitino_client.load_catalog(ident=self.catalog_ident)
+        catalog = self.gravitino_client.load_catalog(self.catalog_ident)
         return catalog.as_fileset_catalog().create_fileset(
             ident=self.fileset_ident,
             fileset_type=Fileset.Type.MANAGED,
@@ -139,14 +141,12 @@ class TestFilesetCatalog(IntegrationTestEnv):
 
     def test_drop_fileset(self):
         self.create_fileset()
-        catalog = self.gravitino_client.load_catalog(ident=self.catalog_ident)
-        self.assertTrue(
-            catalog.as_fileset_catalog().drop_fileset(ident=self.fileset_ident)
-        )
+        catalog = self.gravitino_client.load_catalog(self.catalog_ident)
+        self.assertTrue(catalog.as_fileset_catalog().drop_fileset(self.fileset_ident))
 
     def test_list_fileset(self):
         self.create_fileset()
-        catalog = self.gravitino_client.load_catalog(ident=self.catalog_ident)
+        catalog = self.gravitino_client.load_catalog(self.catalog_ident)
         fileset_list: List[NameIdentifier] = catalog.as_fileset_catalog().list_filesets(
             namespace=self.fileset_ident.namespace()
         )
@@ -155,9 +155,9 @@ class TestFilesetCatalog(IntegrationTestEnv):
     def test_load_fileset(self):
         self.create_fileset()
         fileset = (
-            self.gravitino_client.load_catalog(ident=self.catalog_ident)
+            self.gravitino_client.load_catalog(self.catalog_ident)
             .as_fileset_catalog()
-            .load_fileset(ident=self.fileset_ident)
+            .load_fileset(self.fileset_ident)
         )
         self.assertIsNotNone(fileset)
         self.assertEqual(fileset.name(), self.fileset_name)
@@ -175,7 +175,7 @@ class TestFilesetCatalog(IntegrationTestEnv):
                 self.fileset_properties_key2, fileset_propertie_new_value
             ),
         )
-        catalog = self.gravitino_client.load_catalog(ident=self.catalog_ident)
+        catalog = self.gravitino_client.load_catalog(self.catalog_ident)
         fileset_new = catalog.as_fileset_catalog().alter_fileset(
             self.fileset_ident, *changes
         )
