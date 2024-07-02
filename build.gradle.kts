@@ -511,7 +511,7 @@ tasks {
   val outputDir = projectDir.dir("distribution")
 
   val compileDistribution by registering {
-    dependsOn("copySubprojectDependencies", "copyCatalogLibAndConfigs", "copySubprojectLib")
+    dependsOn("copySubprojectDependencies", "copyCatalogLibAndConfigs", "copySubprojectLib", "copyIcebergRESTServer")
 
     group = "gravitino distribution"
     outputs.dir(projectDir.dir("distribution/package"))
@@ -544,7 +544,7 @@ tasks {
     }
   }
 
-  val compileIcebergRESTServer by registering {
+  val copyIcebergRESTServer by registering {
     dependsOn("iceberg-rest-server:copyLibs")
     group = "Iceberg REST server distribution"
     outputs.dir(projectDir.dir("distribution/package/extensions/iceberg-rest-server"))
