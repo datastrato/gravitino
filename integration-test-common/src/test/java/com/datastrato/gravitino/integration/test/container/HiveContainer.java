@@ -7,6 +7,8 @@ package com.datastrato.gravitino.integration.test.container;
 import static java.lang.String.format;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
+import com.datastrato.gravitino.integration.test.util.CommandExecutor;
+import com.datastrato.gravitino.integration.test.util.ProcessData;
 import com.google.common.collect.ImmutableSet;
 import java.io.File;
 import java.net.InetSocketAddress;
@@ -83,6 +85,14 @@ public class HiveContainer extends BaseContainer {
       // Pack the jar files
       container.execInContainer("tar", "cf", hiveLogJarPath, HIVE_LOG_PATH);
       container.execInContainer("tar", "cf", HdfsLogJarPath, HDFS_LOG_PATH);
+      Container.ExecResult execResult = container.execInContainer("ps", "-ef");
+      LOG.info("Process in the Hive docker:\n {} ", execResult.getStdout());
+
+      Object output =
+          CommandExecutor.executeCommandLocalHost(
+              "sudo dmesg", false, ProcessData.TypesOfData.STREAMS_MERGED);
+      LOG.info("In physical machine, command {} output:\n{}", "sudo dmesg", output);
+      LOG.info("-----------------------end of dmesg-------------------------------");
 
       container.copyFileFromContainer(hiveLogJarPath, destPath + File.separator + "hive.tar");
       container.copyFileFromContainer(HdfsLogJarPath, destPath + File.separator + "hdfs.tar");
