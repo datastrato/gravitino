@@ -25,9 +25,11 @@ import java.util.Collections;
 import org.apache.gravitino.Entity;
 import org.apache.gravitino.EntityAlreadyExistsException;
 import org.apache.gravitino.EntityStore;
+import org.apache.gravitino.Namespace;
 import org.apache.gravitino.exceptions.GroupAlreadyExistsException;
 import org.apache.gravitino.exceptions.NoSuchEntityException;
 import org.apache.gravitino.exceptions.NoSuchGroupException;
+import org.apache.gravitino.exceptions.NoSuchMetalakeException;
 import org.apache.gravitino.exceptions.NoSuchUserException;
 import org.apache.gravitino.exceptions.UserAlreadyExistsException;
 import org.apache.gravitino.meta.AuditInfo;
@@ -46,6 +48,7 @@ import org.slf4j.LoggerFactory;
 class UserGroupManager {
 
   private static final Logger LOG = LoggerFactory.getLogger(UserGroupManager.class);
+  private static final String METALAKE_DOES_NOT_EXIST_MSG = "Metalake %s does not exist";
 
   private final EntityStore store;
   private final IdGenerator idGenerator;
@@ -105,6 +108,37 @@ class UserGroupManager {
       throw new NoSuchUserException(AuthorizationUtils.USER_DOES_NOT_EXIST_MSG, user, metalake);
     } catch (IOException ioe) {
       LOG.error("Getting user {} failed due to storage issues", user, ioe);
+      throw new RuntimeException(ioe);
+    }
+  }
+
+  String[] listUserNames(String metalake) {
+    try {
+      AuthorizationUtils.checkMetalakeExists(metalake);
+      Namespace namespace = AuthorizationUtils.ofUserNamespace(metalake);
+      return store.list(namespace, UserEntity.class, Entity.EntityType.USER).stream()
+          .map(UserEntity::name)
+          .toArray(String[]::new);
+    } catch (NoSuchEntityException e) {
+      LOG.warn("Metalake {} does not exist", metalake, e);
+      throw new NoSuchMetalakeException(METALAKE_DOES_NOT_EXIST_MSG, metalake);
+    } catch (IOException ioe) {
+      LOG.error("Listing user under metalake {} failed due to storage issues", metalake, ioe);
+      throw new RuntimeException(ioe);
+    }
+  }
+
+  User[] listUsers(String metalake) {
+    try {
+      Namespace namespace = AuthorizationUtils.ofUserNamespace(metalake);
+      return store.list(namespace, UserEntity.class, Entity.EntityType.USER).stream()
+          .map(entity -> (User) entity)
+          .toArray(User[]::new);
+    } catch (NoSuchEntityException e) {
+      LOG.warn("Metalake {} does not exist", metalake, e);
+      throw new NoSuchMetalakeException(METALAKE_DOES_NOT_EXIST_MSG, metalake);
+    } catch (IOException ioe) {
+      LOG.error("Listing user under metalake {} failed due to storage issues", metalake, ioe);
       throw new RuntimeException(ioe);
     }
   }

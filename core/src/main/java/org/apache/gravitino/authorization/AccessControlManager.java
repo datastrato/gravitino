@@ -101,6 +101,14 @@ public class AccessControlManager {
     return doWithNonAdminLock(() -> userGroupManager.getUser(metalake, user));
   }
 
+  public String[] listUserNames(String metalake) throws NoSuchMetalakeException {
+    return userGroupManager.listUserNames(metalake);
+  }
+
+  public User[] listUsers(String metalake) throws NoSuchMetalakeException {
+    return userGroupManager.listUsers(metalake);
+  }
+
   /**
    * Adds a new Group.
    *
