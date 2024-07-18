@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import org.apache.gravitino.Entity;
 import org.apache.gravitino.HasIdentifier;
@@ -35,7 +34,6 @@ import org.apache.gravitino.Namespace;
 import org.apache.gravitino.authorization.AuthorizationUtils;
 import org.apache.gravitino.exceptions.NoSuchEntityException;
 import org.apache.gravitino.meta.UserEntity;
-import org.apache.gravitino.storage.relational.mapper.MetalakeMetaMapper;
 import org.apache.gravitino.storage.relational.mapper.UserMetaMapper;
 import org.apache.gravitino.storage.relational.mapper.UserRoleRelMapper;
 import org.apache.gravitino.storage.relational.po.RolePO;
@@ -229,27 +227,10 @@ public class UserMetaService {
 
     List<UserEntity> userEntities = Lists.newArrayList();
     String metalakeName = namespace.level(0);
-    List<UserPO> userPOs = Lists.newArrayList();
-    AtomicLong metalakeId = new AtomicLong();
-    SessionUtils.doMultipleWithoutCommit(
-        () -> {
-          Long id =
-              SessionUtils.doWithoutCommitAndFetchResult(
-                  MetalakeMetaMapper.class,
-                  mapper -> mapper.selectMetalakeIdMetaByName(metalakeName));
-          if (id == null) {
-            throw new NoSuchEntityException(
-                NoSuchEntityException.NO_SUCH_ENTITY_MESSAGE,
-                Entity.EntityType.METALAKE.name().toLowerCase(),
-                metalakeName);
-          }
-          metalakeId.set(id);
-        },
-        () ->
-            userPOs.addAll(
-                SessionUtils.doWithoutCommitAndFetchResult(
-                    UserMetaMapper.class,
-                    mapper -> mapper.listUserPOsByMetalakeId(metalakeId.get()))));
+    List<UserPO> userPOs =
+        SessionUtils.getWithoutCommit(
+            UserMetaMapper.class, mapper -> mapper.listUserPOsByMetalake(metalakeName));
+
     for (UserPO userPO : userPOs) {
       List<RolePO> rolePOs = RoleMetaService.getInstance().listRolesByUserId(userPO.getUserId());
       userEntities.add(POConverters.fromUserPO(userPO, rolePOs, namespace));

@@ -145,12 +145,6 @@ class TestUserMetaService extends TestJDBCBackend {
     Assertions.assertEquals(
         Lists.newArrayList(user1, user2),
         userMetaService.listUsersByNamespace(AuthorizationUtils.ofUserNamespace(metalakeName)));
-
-    // Test NoSuchMetalakeException
-    Assertions.assertThrows(
-        NoSuchEntityException.class,
-        () ->
-            userMetaService.listUsersByNamespace(AuthorizationUtils.ofUserNamespace("not-exist")));
   }
 
   @Test

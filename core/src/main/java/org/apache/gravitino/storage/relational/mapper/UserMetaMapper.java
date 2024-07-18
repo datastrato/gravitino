@@ -61,16 +61,19 @@ public interface UserMetaMapper {
       @Param("metalakeId") Long metalakeId, @Param("userName") String name);
 
   @Select(
-      "SELECT user_id as userId, user_name as userName,"
-          + " metalake_id as metalakeId,"
-          + " audit_info as auditInfo,"
-          + " current_version as currentVersion, last_version as lastVersion,"
-          + " deleted_at as deletedAt"
+      "SELECT ut.user_id as userId, ut.user_name as userName,"
+          + " ut.metalake_id as metalakeId,"
+          + " ut.audit_info as auditInfo,"
+          + " ut.current_version as currentVersion, ut.last_version as lastVersion,"
+          + " ut.deleted_at as deletedAt"
           + " FROM "
           + USER_TABLE_NAME
-          + " WHERE metalake_id = #{metalakeId}"
-          + " AND deleted_at = 0")
-  List<UserPO> listUserPOsByMetalakeId(@Param("metalakeId") Long metalakeId);
+          + " ut JOIN "
+          + MetalakeMetaMapper.TABLE_NAME
+          + " mt ON ut.metalake_id = mt.metalake_id"
+          + " WHERE mt.metalake_name = #{metalakeName}"
+          + " AND ut.deleted_at = 0 AND mt.deleted_at = 0")
+  List<UserPO> listUserPOsByMetalake(@Param("metalakeName") String metalakeName);
 
   @Insert(
       "INSERT INTO "

@@ -21,6 +21,7 @@ package org.apache.gravitino.authorization;
 import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collections;
 import org.apache.gravitino.Entity;
 import org.apache.gravitino.EntityAlreadyExistsException;
@@ -113,19 +114,7 @@ class UserGroupManager {
   }
 
   String[] listUserNames(String metalake) {
-    try {
-      AuthorizationUtils.checkMetalakeExists(metalake);
-      Namespace namespace = AuthorizationUtils.ofUserNamespace(metalake);
-      return store.list(namespace, UserEntity.class, Entity.EntityType.USER).stream()
-          .map(UserEntity::name)
-          .toArray(String[]::new);
-    } catch (NoSuchEntityException e) {
-      LOG.warn("Metalake {} does not exist", metalake, e);
-      throw new NoSuchMetalakeException(METALAKE_DOES_NOT_EXIST_MSG, metalake);
-    } catch (IOException ioe) {
-      LOG.error("Listing user under metalake {} failed due to storage issues", metalake, ioe);
-      throw new RuntimeException(ioe);
-    }
+    return Arrays.stream(listUsers(metalake)).map(User::name).toArray(String[]::new);
   }
 
   User[] listUsers(String metalake) {
