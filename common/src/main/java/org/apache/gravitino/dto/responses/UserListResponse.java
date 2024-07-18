@@ -19,6 +19,7 @@
 package org.apache.gravitino.dto.responses;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Preconditions;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
@@ -50,5 +51,16 @@ public class UserListResponse extends BaseResponse {
   public UserListResponse() {
     super(0);
     this.users = null;
+  }
+
+  /**
+   * Validates the response data.
+   *
+   * @throws IllegalArgumentException if users are not set.
+   */
+  @Override
+  public void validate() throws IllegalArgumentException {
+    super.validate();
+    Preconditions.checkArgument(users != null, "users must not be null");
   }
 }

@@ -19,6 +19,7 @@
 package org.apache.gravitino.dto.responses;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.base.Preconditions;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
@@ -49,5 +50,16 @@ public class NameListResponse extends BaseResponse {
   public NameListResponse() {
     super(0);
     this.names = null;
+  }
+
+  /**
+   * Validates the response data.
+   *
+   * @throws IllegalArgumentException if names are not set.
+   */
+  @Override
+  public void validate() throws IllegalArgumentException {
+    super.validate();
+    Preconditions.checkArgument(names != null, "names must not be null");
   }
 }
