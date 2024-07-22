@@ -145,4 +145,20 @@ public class SessionUtils {
       }
     }
   }
+
+  /**
+   * This method is used to perform multiple database operations without commit. If any of the
+   * operations fail, we just abort the operations.
+   *
+   * @param operations the operations to be performed
+   */
+  public static void doMultipleWithoutCommit(Runnable... operations) {
+    try {
+      Arrays.stream(operations).forEach(Runnable::run);
+    } catch (Throwable t) {
+      throw t;
+    } finally {
+      SqlSessions.closeSqlSession();
+    }
+  }
 }

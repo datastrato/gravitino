@@ -30,6 +30,7 @@ import java.util.function.Function;
 import org.apache.gravitino.Entity;
 import org.apache.gravitino.HasIdentifier;
 import org.apache.gravitino.NameIdentifier;
+import org.apache.gravitino.Namespace;
 import org.apache.gravitino.authorization.AuthorizationUtils;
 import org.apache.gravitino.exceptions.NoSuchEntityException;
 import org.apache.gravitino.meta.UserEntity;
@@ -219,6 +220,22 @@ public class UserMetaService {
       throw re;
     }
     return newEntity;
+  }
+
+  public List<UserEntity> listUsersByNamespace(Namespace namespace) {
+    AuthorizationUtils.checkUserNamespace(namespace);
+
+    List<UserEntity> userEntities = Lists.newArrayList();
+    String metalakeName = namespace.level(0);
+    List<UserPO> userPOs =
+        SessionUtils.getWithoutCommit(
+            UserMetaMapper.class, mapper -> mapper.listUserPOsByMetalake(metalakeName));
+
+    for (UserPO userPO : userPOs) {
+      List<RolePO> rolePOs = RoleMetaService.getInstance().listRolesByUserId(userPO.getUserId());
+      userEntities.add(POConverters.fromUserPO(userPO, rolePOs, namespace));
+    }
+    return userEntities;
   }
 
   public int deleteUserMetasByLegacyTimeline(long legacyTimeline, int limit) {

@@ -22,6 +22,7 @@ package org.apache.gravitino.client;
 import com.google.common.base.Preconditions;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,8 +46,10 @@ import org.apache.gravitino.dto.responses.DropResponse;
 import org.apache.gravitino.dto.responses.GroupResponse;
 import org.apache.gravitino.dto.responses.MetalakeListResponse;
 import org.apache.gravitino.dto.responses.MetalakeResponse;
+import org.apache.gravitino.dto.responses.NameListResponse;
 import org.apache.gravitino.dto.responses.RemoveResponse;
 import org.apache.gravitino.dto.responses.RoleResponse;
+import org.apache.gravitino.dto.responses.UserListResponse;
 import org.apache.gravitino.dto.responses.UserResponse;
 import org.apache.gravitino.exceptions.GroupAlreadyExistsException;
 import org.apache.gravitino.exceptions.MetalakeAlreadyExistsException;
@@ -259,6 +262,48 @@ public class GravitinoAdminClient extends GravitinoClientBase implements Support
     resp.validate();
 
     return resp.getUser();
+  }
+
+  /**
+   * Lists the usernames.
+   *
+   * @param metalake The Metalake of the User.
+   * @return The username list.
+   * @throws NoSuchMetalakeException If the Metalake with the given name does not exist.
+   */
+  public String[] listUserNames(String metalake) throws NoSuchMetalakeException {
+    NameListResponse resp =
+        restClient.get(
+            String.format(API_METALAKES_USERS_PATH, metalake, BLANK_PLACE_HOLDER),
+            NameListResponse.class,
+            Collections.emptyMap(),
+            ErrorHandlers.userErrorHandler());
+    resp.validate();
+
+    return resp.getNames();
+  }
+
+  /**
+   * Lists the users.
+   *
+   * @param metalake The Metalake of the User.
+   * @return The User list.
+   * @throws NoSuchMetalakeException If the Metalake with the given name does not exist.
+   */
+  public User[] listUsers(String metalake) {
+    Map<String, String> params = new HashMap<>();
+    params.put("details", "true");
+
+    UserListResponse resp =
+        restClient.get(
+            String.format(API_METALAKES_USERS_PATH, metalake, BLANK_PLACE_HOLDER),
+            params,
+            UserListResponse.class,
+            Collections.emptyMap(),
+            ErrorHandlers.userErrorHandler());
+    resp.validate();
+
+    return resp.getUsers();
   }
 
   /**
