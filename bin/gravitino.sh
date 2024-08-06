@@ -118,6 +118,7 @@ function start() {
     return 1;
   else
     echo "Gravitino Server start success!"
+    printArt
   fi
 
   sleep 2
@@ -139,6 +140,16 @@ function stop() {
     wait_for_gravitino_server_to_die
     echo "Gravitino Server stop"
   fi
+}
+
+function printArt() {
+    echo "###########################################################"
+    echo "#    ____ ____      ___     _____ _____ ___ _   _  ___    #"
+    echo "#   / ___|  _ \    / \ \   / /_ _|_   _|_ _| \ | |/ _ \   #"
+    echo "#  | |  _| |_) |  / _ \ \ / / | |  | |  | ||  \| | | | |  #"
+    echo "#  | |_| |  _ <  / ___ \ V /  | |  | |  | || |\  | |_| |  #"
+    echo "#   \____|_| \_\/_/   \_\_/  |___| |_| |___|_| \_|\___/   #"
+    echo "###########################################################"
 }
 
 HOSTNAME=$(hostname)
