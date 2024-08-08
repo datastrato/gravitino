@@ -142,16 +142,6 @@ function stop() {
   fi
 }
 
-function printArt() {
-    echo "###########################################################"
-    echo "#    ____ ____      ___     _____ _____ ___ _   _  ___    #"
-    echo "#   / ___|  _ \    / \ \   / /_ _|_   _|_ _| \ | |/ _ \   #"
-    echo "#  | |  _| |_) |  / _ \ \ / / | |  | |  | ||  \| | | | |  #"
-    echo "#  | |_| |  _ <  / ___ \ V /  | |  | |  | || |\  | |_| |  #"
-    echo "#   \____|_| \_\/_/   \_\_/  |___| |_| |___|_| \_|\___/   #"
-    echo "###########################################################"
-}
-
 HOSTNAME=$(hostname)
 GRAVITINO_OUTFILE="${GRAVITINO_LOG_DIR}/gravitino-server.out"
 GRAVITINO_SERVER_NAME=org.apache.gravitino.server.GravitinoServer
