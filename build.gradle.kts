@@ -708,6 +708,7 @@ tasks {
         it.name != "bundled-catalog" &&
         it.name != "flink-connector"
       ) {
+        delete("${it.name}/build/libs")
         dependsOn("${it.name}:build")
         from("${it.name}/build/libs")
         into("distribution/package/libs")
