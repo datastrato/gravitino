@@ -35,6 +35,7 @@ import org.apache.gravitino.storage.relational.mapper.SecurableObjectMapper;
 import org.apache.gravitino.storage.relational.mapper.UserRoleRelMapper;
 import org.apache.gravitino.storage.relational.po.RolePO;
 import org.apache.gravitino.storage.relational.po.SecurableObjectPO;
+import org.apache.gravitino.storage.relational.service.NameIdMappingService.EntityIdentifier;
 import org.apache.gravitino.storage.relational.utils.ExceptionUtils;
 import org.apache.gravitino.storage.relational.utils.POConverters;
 import org.apache.gravitino.storage.relational.utils.SessionUtils;
@@ -83,6 +84,22 @@ public class RoleMetaService {
     return roleId;
   }
 
+  public Long getRoleIdByNameIdentifier(NameIdentifier identifier) {
+    AuthorizationUtils.checkRole(identifier);
+
+    EntityIdentifier entityIdentifier = EntityIdentifier.of(identifier, Entity.EntityType.ROLE);
+
+    return NameIdMappingService.getInstance()
+        .get(
+            entityIdentifier,
+            ident -> {
+              Long metalakeId =
+                  MetalakeMetaService.getInstance()
+                      .getMetalakeIdByName(ident.ident.namespace().level(0));
+              return getRoleIdByMetalakeIdAndName(metalakeId, ident.ident.name());
+            });
+  }
+
   public List<RolePO> listRolesByUserId(Long userId) {
     return SessionUtils.getWithoutCommit(
         RoleMetaMapper.class, mapper -> mapper.listRolesByUserId(userId));
@@ -97,6 +114,7 @@ public class RoleMetaService {
     try {
       AuthorizationUtils.checkRole(roleEntity.nameIdentifier());
 
+      String metalakeName = roleEntity.namespace().level(0);
       Long metalakeId =
           MetalakeMetaService.getInstance().getMetalakeIdByName(roleEntity.namespace().level(0));
       RolePO.Builder builder = RolePO.builder().withMetalakeId(metalakeId);
@@ -108,7 +126,7 @@ public class RoleMetaService {
                 roleEntity.id(), object, getEntityType(object));
         objectBuilder.withEntityId(
             MetadataObjectService.getMetadataObjectId(
-                metalakeId, object.fullName(), object.type()));
+                metalakeName, object.fullName(), object.type()));
         securableObjectPOs.add(objectBuilder.build());
       }
 
@@ -174,9 +192,7 @@ public class RoleMetaService {
   public boolean deleteRole(NameIdentifier identifier) {
     AuthorizationUtils.checkRole(identifier);
 
-    Long metalakeId =
-        MetalakeMetaService.getInstance().getMetalakeIdByName(identifier.namespace().level(0));
-    Long roleId = getRoleIdByMetalakeIdAndName(metalakeId, identifier.name());
+    Long roleId = getRoleIdByNameIdentifier(identifier);
 
     SessionUtils.doMultipleWithCommit(
         () ->

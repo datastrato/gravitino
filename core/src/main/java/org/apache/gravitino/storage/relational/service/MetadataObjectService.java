@@ -18,11 +18,16 @@
  */
 package org.apache.gravitino.storage.relational.service;
 
+import static org.apache.gravitino.Entity.ROLE_SCHEMA_NAME;
+import static org.apache.gravitino.Entity.SYSTEM_CATALOG_RESERVED_NAME;
+
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.gravitino.MetadataObject;
+import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.storage.relational.po.CatalogPO;
 import org.apache.gravitino.storage.relational.po.FilesetPO;
 import org.apache.gravitino.storage.relational.po.MetalakePO;
@@ -43,34 +48,32 @@ public class MetadataObjectService {
   private MetadataObjectService() {}
 
   public static long getMetadataObjectId(
-      long metalakeId, String fullName, MetadataObject.Type type) {
+      String metalakeName, String fullName, MetadataObject.Type type) {
     if (type == MetadataObject.Type.METALAKE) {
       return MetalakeMetaService.getInstance().getMetalakeIdByName(fullName);
     }
 
-    List<String> names = DOT_SPLITTER.splitToList(fullName);
     if (type == MetadataObject.Type.ROLE) {
-      return RoleMetaService.getInstance().getRoleIdByMetalakeIdAndName(metalakeId, names.get(0));
+      NameIdentifier nameIdentifier =
+          NameIdentifier.of(metalakeName, SYSTEM_CATALOG_RESERVED_NAME, ROLE_SCHEMA_NAME, fullName);
+      return RoleMetaService.getInstance().getRoleIdByNameIdentifier(nameIdentifier);
     }
 
-    long catalogId =
-        CatalogMetaService.getInstance().getCatalogIdByMetalakeIdAndName(metalakeId, names.get(0));
+    List<String> names = DOT_SPLITTER.splitToList(fullName);
+    List<String> realNames = Lists.newArrayList(metalakeName);
+    realNames.addAll(names);
+    NameIdentifier nameIdentifier = NameIdentifier.of(realNames.toArray(new String[0]));
+
     if (type == MetadataObject.Type.CATALOG) {
-      return catalogId;
-    }
-
-    long schemaId =
-        SchemaMetaService.getInstance().getSchemaIdByCatalogIdAndName(catalogId, names.get(1));
-    if (type == MetadataObject.Type.SCHEMA) {
-      return schemaId;
-    }
-
-    if (type == MetadataObject.Type.FILESET) {
-      return FilesetMetaService.getInstance().getFilesetIdBySchemaIdAndName(schemaId, names.get(2));
+      return CatalogMetaService.getInstance().getCatalogIdByNameIdentifier(nameIdentifier);
+    } else if (type == MetadataObject.Type.SCHEMA) {
+      return SchemaMetaService.getInstance().getSchemaIdByNameIdentifier(nameIdentifier);
+    } else if (type == MetadataObject.Type.FILESET) {
+      return FilesetMetaService.getInstance().getFilesetIdByNameIdentifier(nameIdentifier);
     } else if (type == MetadataObject.Type.TOPIC) {
-      return TopicMetaService.getInstance().getTopicIdBySchemaIdAndName(schemaId, names.get(2));
+      return TopicMetaService.getInstance().getTopicIdByNameIdentifier(nameIdentifier);
     } else if (type == MetadataObject.Type.TABLE) {
-      return TableMetaService.getInstance().getTableIdBySchemaIdAndName(schemaId, names.get(2));
+      return TableMetaService.getInstance().getTableByNameIdentifier(nameIdentifier);
     }
 
     throw new IllegalArgumentException(String.format("Doesn't support the type %s", type));
