@@ -118,6 +118,7 @@ function start() {
     return 1;
   else
     echo "Gravitino Server start success!"
+    printArt
   fi
 
   sleep 2

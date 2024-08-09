@@ -118,6 +118,7 @@ function start() {
     return 1;
   else
     echo "GravitinoIcebergRESTServer start success!"
+    printArt
   fi
 
   sleep 2
