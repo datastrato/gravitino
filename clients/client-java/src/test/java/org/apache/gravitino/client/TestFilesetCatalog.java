@@ -34,22 +34,29 @@ import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.Namespace;
 import org.apache.gravitino.dto.AuditDTO;
 import org.apache.gravitino.dto.CatalogDTO;
+import org.apache.gravitino.dto.file.FilesetContextDTO;
 import org.apache.gravitino.dto.file.FilesetDTO;
 import org.apache.gravitino.dto.requests.CatalogCreateRequest;
 import org.apache.gravitino.dto.requests.FilesetCreateRequest;
 import org.apache.gravitino.dto.requests.FilesetUpdateRequest;
 import org.apache.gravitino.dto.requests.FilesetUpdatesRequest;
+import org.apache.gravitino.dto.requests.GetFilesetContextRequest;
 import org.apache.gravitino.dto.responses.CatalogResponse;
 import org.apache.gravitino.dto.responses.DropResponse;
 import org.apache.gravitino.dto.responses.EntityListResponse;
 import org.apache.gravitino.dto.responses.ErrorResponse;
+import org.apache.gravitino.dto.responses.FilesetContextResponse;
 import org.apache.gravitino.dto.responses.FilesetResponse;
 import org.apache.gravitino.exceptions.AlreadyExistsException;
 import org.apache.gravitino.exceptions.FilesetAlreadyExistsException;
 import org.apache.gravitino.exceptions.NoSuchFilesetException;
 import org.apache.gravitino.exceptions.NoSuchSchemaException;
 import org.apache.gravitino.exceptions.NotFoundException;
+import org.apache.gravitino.file.BaseFilesetDataOperationCtx;
+import org.apache.gravitino.file.ClientType;
 import org.apache.gravitino.file.Fileset;
+import org.apache.gravitino.file.FilesetContext;
+import org.apache.gravitino.file.FilesetDataOperation;
 import org.apache.hc.core5.http.Method;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -400,6 +407,47 @@ public class TestFilesetCatalog extends TestBase {
         "internal error");
   }
 
+  @Test
+  public void testGetFilesetContext() throws JsonProcessingException {
+    NameIdentifier fileset = NameIdentifier.of(metalakeName, catalogName, "schema1", "fileset1");
+    String filesetPath =
+        withSlash(
+            FilesetCatalog.formatFilesetRequestPath(fileset.namespace()) + "/fileset1/context");
+
+    FilesetDTO mockFileset =
+        mockFilesetDTO(
+            fileset.name(),
+            Fileset.Type.MANAGED,
+            "mock comment",
+            "mock location",
+            ImmutableMap.of("k1", "v1"));
+    String mockActualPath = "mock location/test";
+    FilesetContextDTO mockContext = mockFilesetContextDTO(mockFileset, mockActualPath);
+    FilesetContextResponse resp = new FilesetContextResponse(mockContext);
+    GetFilesetContextRequest req =
+        GetFilesetContextRequest.builder()
+            .subPath("/test")
+            .operation(FilesetDataOperation.OPEN)
+            .clientType(ClientType.HADOOP_GVFS)
+            .build();
+    buildMockResource(Method.POST, filesetPath, req, resp, SC_OK);
+    BaseFilesetDataOperationCtx ctx =
+        BaseFilesetDataOperationCtx.builder()
+            .withSubPath("/test")
+            .withOperation(FilesetDataOperation.OPEN)
+            .withClientType(ClientType.HADOOP_GVFS)
+            .build();
+    FilesetContext filesetContext =
+        catalog
+            .asFilesetCatalog()
+            .getFilesetContext(
+                NameIdentifier.of(fileset.namespace().level(2), fileset.name()), ctx);
+    Assertions.assertNotNull(filesetContext);
+    assertFileset(mockFileset, filesetContext.fileset());
+
+    Assertions.assertEquals(mockActualPath, filesetContext.actualPath());
+  }
+
   private FilesetDTO mockFilesetDTO(
       String name,
       Fileset.Type type,
@@ -414,6 +462,10 @@ public class TestFilesetCatalog extends TestBase {
         .properties(properties)
         .audit(AuditDTO.builder().withCreator("creator").withCreateTime(Instant.now()).build())
         .build();
+  }
+
+  private FilesetContextDTO mockFilesetContextDTO(FilesetDTO fileset, String actualPath) {
+    return FilesetContextDTO.builder().fileset(fileset).actualPath(actualPath).build();
   }
 
   private void assertFileset(FilesetDTO expected, Fileset actual) {

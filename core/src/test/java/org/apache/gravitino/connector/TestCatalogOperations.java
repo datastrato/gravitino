@@ -18,20 +18,25 @@
  */
 package org.apache.gravitino.connector;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.Namespace;
 import org.apache.gravitino.Schema;
 import org.apache.gravitino.SchemaChange;
 import org.apache.gravitino.TestFileset;
+import org.apache.gravitino.TestFilesetContext;
 import org.apache.gravitino.TestSchema;
 import org.apache.gravitino.TestTable;
 import org.apache.gravitino.TestTopic;
+import org.apache.gravitino.catalog.EntityCombinedFileset;
 import org.apache.gravitino.exceptions.ConnectionFailedException;
 import org.apache.gravitino.exceptions.FilesetAlreadyExistsException;
 import org.apache.gravitino.exceptions.NoSuchCatalogException;
@@ -46,6 +51,9 @@ import org.apache.gravitino.exceptions.TopicAlreadyExistsException;
 import org.apache.gravitino.file.Fileset;
 import org.apache.gravitino.file.FilesetCatalog;
 import org.apache.gravitino.file.FilesetChange;
+import org.apache.gravitino.file.FilesetContext;
+import org.apache.gravitino.file.FilesetDataOperation;
+import org.apache.gravitino.file.FilesetDataOperationCtx;
 import org.apache.gravitino.messaging.DataLayout;
 import org.apache.gravitino.messaging.Topic;
 import org.apache.gravitino.messaging.TopicCatalog;
@@ -63,6 +71,8 @@ import org.apache.gravitino.rel.indexes.Index;
 public class TestCatalogOperations
     implements CatalogOperations, TableCatalog, FilesetCatalog, TopicCatalog, SupportsSchemas {
 
+  private HasPropertyMetadata propertiesMetadata;
+
   private final Map<NameIdentifier, TestTable> tables;
 
   private final Map<NameIdentifier, TestSchema> schemas;
@@ -75,6 +85,8 @@ public class TestCatalogOperations
 
   public static final String FAIL_TEST = "need-fail";
 
+  private static final String SLASH = "/";
+
   public TestCatalogOperations(Map<String, String> config) {
     tables = Maps.newHashMap();
     schemas = Maps.newHashMap();
@@ -85,7 +97,9 @@ public class TestCatalogOperations
   @Override
   public void initialize(
       Map<String, String> config, CatalogInfo info, HasPropertyMetadata propertyMetadata)
-      throws RuntimeException {}
+      throws RuntimeException {
+    this.propertiesMetadata = propertyMetadata;
+  }
 
   @Override
   public void close() throws IOException {}
@@ -431,6 +445,50 @@ public class TestCatalogOperations
   }
 
   @Override
+  public FilesetContext getFilesetContext(NameIdentifier ident, FilesetDataOperationCtx ctx) {
+    Preconditions.checkArgument(ctx.subPath() != null, "subPath must not be null");
+    // fill the sub path with a leading slash if it does not have one
+    String subPath;
+    if (!ctx.subPath().trim().startsWith(SLASH)) {
+      subPath = SLASH + ctx.subPath().trim();
+    } else {
+      subPath = ctx.subPath().trim();
+    }
+
+    Fileset fileset = loadFileset(ident);
+
+    boolean isMountFile = checkMountsSingleFile(fileset);
+    Preconditions.checkArgument(ctx.operation() != null, "operation must not be null.");
+    if (ctx.operation() == FilesetDataOperation.RENAME) {
+      Preconditions.checkArgument(
+          subPath.startsWith(SLASH) && subPath.length() > 1,
+          "subPath cannot be blank when need to rename a file or a directory.");
+      Preconditions.checkArgument(
+          !isMountFile,
+          String.format(
+              "Cannot rename the fileset: %s which only mounts to a single file.", ident));
+    }
+
+    String actualPath;
+    // subPath cannot be null, so we only need check if it is just with "/"
+    if (subPath.startsWith(SLASH) && subPath.length() == 1) {
+      actualPath = fileset.storageLocation();
+    } else {
+      actualPath = fileset.storageLocation() + subPath;
+    }
+
+    return TestFilesetContext.builder()
+        .withFileset(
+            EntityCombinedFileset.of(fileset)
+                .withHiddenPropertiesSet(
+                    fileset.properties().keySet().stream()
+                        .filter(propertiesMetadata.filesetPropertiesMetadata()::isHiddenProperty)
+                        .collect(Collectors.toSet())))
+        .withActualPath(actualPath)
+        .build();
+  }
+
+  @Override
   public NameIdentifier[] listTopics(Namespace namespace) throws NoSuchSchemaException {
     return topics.keySet().stream()
         .filter(ident -> ident.namespace().equals(namespace))
@@ -534,6 +592,15 @@ public class TestCatalogOperations
       Map<String, String> properties) {
     if ("true".equals(properties.get(FAIL_TEST))) {
       throw new ConnectionFailedException("Connection failed");
+    }
+  }
+
+  private boolean checkMountsSingleFile(Fileset fileset) {
+    try {
+      File locationPath = new File(fileset.storageLocation());
+      return locationPath.isFile();
+    } catch (Exception e) {
+      return false;
     }
   }
 }

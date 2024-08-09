@@ -23,6 +23,7 @@ import static org.apache.gravitino.connector.BaseCatalog.CATALOG_BYPASS_PREFIX;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Collections;
@@ -40,6 +41,7 @@ import org.apache.gravitino.Namespace;
 import org.apache.gravitino.Schema;
 import org.apache.gravitino.SchemaChange;
 import org.apache.gravitino.StringIdentifier;
+import org.apache.gravitino.catalog.EntityCombinedFileset;
 import org.apache.gravitino.connector.CatalogInfo;
 import org.apache.gravitino.connector.CatalogOperations;
 import org.apache.gravitino.connector.HasPropertyMetadata;
@@ -55,6 +57,9 @@ import org.apache.gravitino.exceptions.SchemaAlreadyExistsException;
 import org.apache.gravitino.file.Fileset;
 import org.apache.gravitino.file.FilesetCatalog;
 import org.apache.gravitino.file.FilesetChange;
+import org.apache.gravitino.file.FilesetContext;
+import org.apache.gravitino.file.FilesetDataOperation;
+import org.apache.gravitino.file.FilesetDataOperationCtx;
 import org.apache.gravitino.meta.AuditInfo;
 import org.apache.gravitino.meta.FilesetEntity;
 import org.apache.gravitino.meta.SchemaEntity;
@@ -69,6 +74,7 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
 
   private static final String SCHEMA_DOES_NOT_EXIST_MSG = "Schema %s does not exist";
   private static final String FILESET_DOES_NOT_EXIST_MSG = "Fileset %s does not exist";
+  private static final String SLASH = "/";
 
   private static final Logger LOG = LoggerFactory.getLogger(HadoopCatalogOperations.class);
 
@@ -352,6 +358,51 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
     } catch (IOException ioe) {
       throw new RuntimeException("Failed to delete fileset " + ident, ioe);
     }
+  }
+
+  @Override
+  public FilesetContext getFilesetContext(NameIdentifier ident, FilesetDataOperationCtx ctx)
+      throws NoSuchFilesetException {
+    Preconditions.checkArgument(ctx.subPath() != null, "subPath must not be null");
+    // fill the sub path with a leading slash if it does not have one
+    String subPath;
+    if (!ctx.subPath().trim().startsWith(SLASH)) {
+      subPath = SLASH + ctx.subPath().trim();
+    } else {
+      subPath = ctx.subPath().trim();
+    }
+
+    Fileset fileset = loadFileset(ident);
+
+    boolean isMountFile = checkMountsSingleFile(fileset);
+    Preconditions.checkArgument(ctx.operation() != null, "operation must not be null.");
+    if (ctx.operation() == FilesetDataOperation.RENAME) {
+      Preconditions.checkArgument(
+          subPath.startsWith(SLASH) && subPath.length() > 1,
+          "subPath cannot be blank when need to rename a file or a directory.");
+      Preconditions.checkArgument(
+          !isMountFile,
+          String.format(
+              "Cannot rename the fileset: %s which only mounts to a single file.", ident));
+    }
+
+    String actualPath;
+    // fill the sub path with a leading slash if it does not have one
+    if (subPath.startsWith(SLASH) && subPath.length() == 1) {
+      actualPath = fileset.storageLocation();
+    } else {
+      actualPath = fileset.storageLocation() + subPath;
+    }
+
+    return HadoopFilesetContext.builder()
+        .withFileset(
+            EntityCombinedFileset.of(fileset)
+                .withHiddenPropertiesSet(
+                    fileset.properties().keySet().stream()
+                        .filter(propertiesMetadata.filesetPropertiesMetadata()::isHiddenProperty)
+                        .collect(Collectors.toSet())))
+        .withActualPath(actualPath)
+        .build();
   }
 
   @Override
@@ -642,5 +693,21 @@ public class HadoopCatalogOperations implements CatalogOperations, SupportsSchem
   static Path formalizePath(Path path, Configuration configuration) throws IOException {
     FileSystem defaultFs = FileSystem.get(configuration);
     return path.makeQualified(defaultFs.getUri(), defaultFs.getWorkingDirectory());
+  }
+
+  private boolean checkMountsSingleFile(Fileset fileset) {
+    try {
+      Path locationPath = new Path(fileset.storageLocation());
+      return locationPath.getFileSystem(hadoopConf).getFileStatus(locationPath).isFile();
+    } catch (FileNotFoundException e) {
+      // We should always return false here, same with the logic in `FileSystem.isFile(Path f)`.
+      return false;
+    } catch (IOException e) {
+      throw new RuntimeException(
+          String.format(
+              "Cannot check whether the fileset: %s mounts a single file, exception: %s",
+              fileset.name(), e.getMessage()),
+          e);
+    }
   }
 }

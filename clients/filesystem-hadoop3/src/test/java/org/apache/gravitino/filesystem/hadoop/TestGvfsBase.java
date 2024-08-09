@@ -18,14 +18,13 @@
  */
 package org.apache.gravitino.filesystem.hadoop;
 
+import static org.apache.hc.core5.http.HttpStatus.SC_OK;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -36,16 +35,20 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.io.FileUtils;
 import org.apache.gravitino.NameIdentifier;
+import org.apache.gravitino.dto.file.FilesetContextDTO;
+import org.apache.gravitino.dto.file.FilesetDTO;
+import org.apache.gravitino.dto.responses.FilesetContextResponse;
 import org.apache.gravitino.file.Fileset;
+import org.apache.gravitino.file.FilesetDataOperation;
+import org.apache.gravitino.shaded.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hc.core5.http.Method;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
@@ -57,10 +60,8 @@ public class TestGvfsBase extends GravitinoMockServerBase {
   protected static final String GVFS_IMPL_CLASS = GravitinoVirtualFileSystem.class.getName();
   protected static final String GVFS_ABSTRACT_IMPL_CLASS = Gvfs.class.getName();
   protected static Configuration conf = new Configuration();
-  protected Path localDirPath = null;
-  protected Path localFilePath = null;
-  protected Path managedFilesetPath = null;
-  protected Path externalFilesetPath = null;
+  protected static final Path localCatalogPath =
+      FileSystemTestUtils.createLocalRootDir(catalogName);
 
   @BeforeAll
   public static void setup() {
@@ -82,11 +83,12 @@ public class TestGvfsBase extends GravitinoMockServerBase {
   @AfterAll
   public static void tearDown() {
     GravitinoMockServerBase.tearDown();
-    String fileName = FileSystemTestUtils.localRootPrefix().replace("file:", "");
-    try {
-      FileUtils.deleteDirectory(new File(fileName));
-    } catch (Exception e) {
-      // Ignore
+    try (FileSystem localFileSystem = localCatalogPath.getFileSystem(conf)) {
+      if (localFileSystem.exists(localCatalogPath)) {
+        localFileSystem.delete(localCatalogPath, true);
+      }
+    } catch (IOException e) {
+      // ignore
     }
   }
 
@@ -94,49 +96,20 @@ public class TestGvfsBase extends GravitinoMockServerBase {
   public void init() {
     mockMetalakeDTO(metalakeName, "comment");
     mockCatalogDTO(catalogName, provider, "comment");
-
-    localDirPath =
-        FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, managedFilesetName);
-    mockFilesetDTO(
-        metalakeName,
-        catalogName,
-        schemaName,
-        managedFilesetName,
-        Fileset.Type.MANAGED,
-        localDirPath.toString());
-    managedFilesetPath =
-        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, managedFilesetName, true);
-
-    localFilePath =
-        new Path(
-            FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, externalFilesetName)
-                + "/test.txt");
-    mockFilesetDTO(
-        metalakeName,
-        catalogName,
-        schemaName,
-        externalFilesetName,
-        Fileset.Type.EXTERNAL,
-        localFilePath.toString());
-    externalFilesetPath =
-        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, externalFilesetName, true);
-  }
-
-  @AfterEach
-  public void destroy() throws IOException {
-    Path localRootPath = FileSystemTestUtils.createLocalRootDir(catalogName);
-    try (FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-      if (localFileSystem.exists(localRootPath)) {
-        localFileSystem.delete(localRootPath, true);
-      }
-    }
   }
 
   @Test
   public void testFSCache() throws IOException {
+    String filesetName = "testFSCache";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
 
       Configuration conf1 = localFileSystem.getConf();
       assertEquals(
@@ -155,20 +128,44 @@ public class TestGvfsBase extends GravitinoMockServerBase {
                   GravitinoVirtualFileSystemConfiguration.GVFS_SCHEME)));
 
       // test gvfs, should not get the same fs
-      try (FileSystem externalFs = externalFilesetPath.getFileSystem(conf)) {
-        assertNotEquals(externalFs, gravitinoFileSystem);
+      Path newGvfsPath =
+          FileSystemTestUtils.createFilesetPath(catalogName, schemaName, "new_fileset", true);
+      try (FileSystem anotherFS = newGvfsPath.getFileSystem(conf)) {
+        assertNotEquals(anotherFS, gravitinoFileSystem);
       }
 
       // test proxied local fs, should not get the same fs
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath.toString())
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.MKDIRS, ""),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
+
       FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
       FileSystem proxyLocalFs =
           Objects.requireNonNull(
-                  ((GravitinoVirtualFileSystem) gravitinoFileSystem)
-                      .getFilesetCache()
-                      .getIfPresent(
-                          NameIdentifier.of(
-                              metalakeName, catalogName, schemaName, managedFilesetName)))
-              .getRight();
+              ((GravitinoVirtualFileSystem) gravitinoFileSystem)
+                  .getFilesetFSCache()
+                  .getIfPresent("file"));
 
       String anotherFilesetName = "test_new_fs";
       Path diffLocalPath =
@@ -190,45 +187,36 @@ public class TestGvfsBase extends GravitinoMockServerBase {
             .FS_GRAVITINO_FILESET_CACHE_EVICTION_MILLS_AFTER_ACCESS_KEY,
         "1000");
 
+    Path localPath1 = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, "fileset1");
     Path filesetPath1 =
         FileSystemTestUtils.createFilesetPath(catalogName, schemaName, "fileset1", true);
+    String contextPath1 =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, "fileset1");
     try (FileSystem fs = filesetPath1.getFileSystem(configuration)) {
-      Path localPath1 =
-          FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, "fileset1");
-      mockFilesetDTO(
-          metalakeName,
-          catalogName,
-          schemaName,
-          "fileset1",
-          Fileset.Type.MANAGED,
-          localPath1.toString());
+      FilesetDTO fileset1 =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              "fileset1",
+              Fileset.Type.MANAGED,
+              localPath1.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder().fileset(fileset1).actualPath(localPath1.toString()).build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath1,
+            mockGetContextRequest(FilesetDataOperation.MKDIRS, ""),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
       FileSystemTestUtils.mkdirs(filesetPath1, fs);
-
-      // expired by size
-      Path filesetPath2 =
-          FileSystemTestUtils.createFilesetPath(catalogName, schemaName, "fileset2", true);
-      Path localPath2 =
-          FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, "fileset2");
-      mockFilesetDTO(
-          metalakeName,
-          catalogName,
-          schemaName,
-          "fileset2",
-          Fileset.Type.MANAGED,
-          localPath2.toString());
-      FileSystemTestUtils.mkdirs(filesetPath2, fs);
-
-      Awaitility.await()
-          .atMost(5, TimeUnit.SECONDS)
-          .pollInterval(1, TimeUnit.SECONDS)
-          .untilAsserted(
-              () ->
-                  assertNull(
-                      ((GravitinoVirtualFileSystem) fs)
-                          .getFilesetCache()
-                          .getIfPresent(
-                              NameIdentifier.of(
-                                  metalakeName, catalogName, schemaName, "fileset1"))));
 
       // expired by time
       Awaitility.await()
@@ -237,27 +225,57 @@ public class TestGvfsBase extends GravitinoMockServerBase {
           .untilAsserted(
               () ->
                   assertEquals(
-                      0, ((GravitinoVirtualFileSystem) fs).getFilesetCache().asMap().size()));
-
-      assertNull(
-          ((GravitinoVirtualFileSystem) fs)
-              .getFilesetCache()
-              .getIfPresent(NameIdentifier.of(metalakeName, catalogName, schemaName, "fileset2")));
+                      0, ((GravitinoVirtualFileSystem) fs).getFilesetFSCache().asMap().size()));
     }
   }
 
   @ParameterizedTest
   @ValueSource(booleans = {true, false})
   public void testCreate(boolean withScheme) throws IOException {
+    String filesetName = "testCreate";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
+      // test gvfs normal create
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/test.txt")
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.CREATE, "/test.txt"),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
 
-      // test managed fileset create
+      Path localFilePath = new Path(localPath + "/test.txt");
+      assertFalse(localFileSystem.exists(localFilePath));
       Path filePath = new Path(managedFilesetPath + "/test.txt");
       FileSystemTestUtils.create(filePath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(filePath));
-      gravitinoFileSystem.delete(filePath, true);
+      assertTrue(localFileSystem.exists(localFilePath));
+      localFileSystem.delete(localFilePath, true);
 
       // mock the invalid fileset not in the server
       String invalidFilesetName = "invalid_fileset";
@@ -274,13 +292,6 @@ public class TestGvfsBase extends GravitinoMockServerBase {
       assertThrows(
           RuntimeException.class,
           () -> FileSystemTestUtils.create(localPrefixPath, gravitinoFileSystem));
-
-      // test external fileset mounts a single file
-      FileSystemTestUtils.create(externalFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(externalFilesetPath));
-      assertTrue(gravitinoFileSystem.getFileStatus(externalFilesetPath).isFile());
-      gravitinoFileSystem.delete(externalFilesetPath, true);
-      assertFalse(localFileSystem.exists(localFilePath));
     }
   }
 
@@ -288,21 +299,55 @@ public class TestGvfsBase extends GravitinoMockServerBase {
   @ValueSource(booleans = {true, false})
   @Disabled("Append operation is not supported in LocalFileSystem. We can't test it now.")
   public void testAppend(boolean withScheme) throws IOException {
+    String filesetName = "testAppend";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
 
       // test managed fileset append
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/test.txt")
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.APPEND, "/test.txt"),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
+
       Path appendFile = new Path(managedFilesetPath + "/test.txt");
-      FileSystemTestUtils.create(appendFile, gravitinoFileSystem);
+      Path localAppendFile = new Path(localPath + "/test.txt");
+      FileSystemTestUtils.create(localAppendFile, localFileSystem);
+      assertTrue(localFileSystem.exists(localAppendFile));
       FileSystemTestUtils.append(appendFile, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(appendFile));
-      assertTrue(gravitinoFileSystem.getFileStatus(appendFile).isFile());
       assertEquals(
           "Hello, World!",
           new String(
-              FileSystemTestUtils.read(appendFile, gravitinoFileSystem), StandardCharsets.UTF_8));
-      gravitinoFileSystem.delete(appendFile, true);
+              FileSystemTestUtils.read(localAppendFile, localFileSystem), StandardCharsets.UTF_8));
+      localFileSystem.delete(localAppendFile, true);
 
       // mock the invalid fileset not in server
       String invalidAppendFilesetName = "invalid_fileset";
@@ -319,49 +364,92 @@ public class TestGvfsBase extends GravitinoMockServerBase {
       assertThrows(
           RuntimeException.class,
           () -> FileSystemTestUtils.append(localPrefixPath, gravitinoFileSystem));
-
-      // test external fileset mounts the single file
-      FileSystemTestUtils.create(externalFilesetPath, gravitinoFileSystem);
-      FileSystemTestUtils.append(externalFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(externalFilesetPath));
-      assertTrue(gravitinoFileSystem.getFileStatus(externalFilesetPath).isFile());
-      gravitinoFileSystem.delete(externalFilesetPath, true);
-      assertFalse(localFileSystem.exists(localFilePath));
     }
   }
 
   @ParameterizedTest
   @ValueSource(booleans = {true, false})
   public void testRename(boolean withScheme) throws IOException {
+    String filesetName = "testRename";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
 
       // test managed fileset rename
-      Path srcRenamePath = new Path(managedFilesetPath + "/rename_src");
-      gravitinoFileSystem.mkdirs(srcRenamePath);
-      assertTrue(gravitinoFileSystem.getFileStatus(srcRenamePath).isDirectory());
-      assertTrue(gravitinoFileSystem.exists(srcRenamePath));
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO1 =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/rename_src")
+              .build();
+      FilesetContextResponse contextResponse1 = new FilesetContextResponse(mockContextDTO1);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.RENAME, "/rename_src"),
+            contextResponse1,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
+      FilesetContextDTO mockContextDTO2 =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/rename_dst2")
+              .build();
+      FilesetContextResponse contextResponse2 = new FilesetContextResponse(mockContextDTO2);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.RENAME, "/rename_dst2"),
+            contextResponse2,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
 
+      Path srcLocalRenamePath = new Path(localPath + "/rename_src");
+      localFileSystem.mkdirs(srcLocalRenamePath);
+      assertTrue(localFileSystem.getFileStatus(srcLocalRenamePath).isDirectory());
+      assertTrue(localFileSystem.exists(srcLocalRenamePath));
       // cannot rename the identifier
+      Path srcFilesetRenamePath = new Path(managedFilesetPath + "/rename_src");
       Path dstRenamePath1 =
           FileSystemTestUtils.createFilesetPath(catalogName, schemaName, "rename_dst1", withScheme);
       assertThrows(
-          RuntimeException.class, () -> gravitinoFileSystem.rename(srcRenamePath, dstRenamePath1));
+          RuntimeException.class,
+          () -> gravitinoFileSystem.rename(srcFilesetRenamePath, dstRenamePath1));
 
-      Path dstRenamePath2 = new Path(managedFilesetPath + "/rename_dst2");
-      gravitinoFileSystem.rename(srcRenamePath, dstRenamePath2);
-      assertFalse(gravitinoFileSystem.exists(srcRenamePath));
-      assertTrue(gravitinoFileSystem.exists(dstRenamePath2));
-      gravitinoFileSystem.delete(dstRenamePath2, true);
+      Path dstFilesetRenamePath2 = new Path(managedFilesetPath + "/rename_dst2");
+      Path dstLocalRenamePath2 = new Path(localPath + "/rename_dst2");
+      gravitinoFileSystem.rename(srcFilesetRenamePath, dstFilesetRenamePath2);
+      assertFalse(localFileSystem.exists(srcLocalRenamePath));
+      assertTrue(localFileSystem.exists(dstLocalRenamePath2));
+      localFileSystem.delete(dstLocalRenamePath2, true);
 
       // test invalid src path
       Path invalidSrcPath =
           FileSystemTestUtils.createFilesetPath(
               catalogName, schemaName, "invalid_src_name", withScheme);
       Path validDstPath =
-          FileSystemTestUtils.createFilesetPath(
-              catalogName, schemaName, managedFilesetName, withScheme);
+          FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, withScheme);
       assertThrows(
           RuntimeException.class, () -> gravitinoFileSystem.rename(invalidSrcPath, validDstPath));
 
@@ -372,33 +460,57 @@ public class TestGvfsBase extends GravitinoMockServerBase {
       assertThrows(
           RuntimeException.class,
           () -> gravitinoFileSystem.rename(managedFilesetPath, invalidDstPath));
-
-      // test external fileset mount the single file
-      FileSystemTestUtils.create(externalFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(externalFilesetPath));
-      assertTrue(gravitinoFileSystem.getFileStatus(externalFilesetPath).isFile());
-
-      Path dstPath =
-          FileSystemTestUtils.createFilesetPath(catalogName, schemaName, "rename_dst", withScheme);
-      assertThrows(
-          RuntimeException.class, () -> gravitinoFileSystem.rename(externalFilesetPath, dstPath));
-      localFileSystem.delete(localFilePath, true);
-      assertFalse(localFileSystem.exists(localFilePath));
     }
   }
 
   @ParameterizedTest
   @ValueSource(booleans = {true, false})
   public void testDelete(boolean withScheme) throws IOException {
+    String filesetName = "testDelete";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
 
       // test managed fileset delete
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
-      gravitinoFileSystem.delete(managedFilesetPath, true);
-      assertFalse(gravitinoFileSystem.exists(managedFilesetPath));
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/test_delete")
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.DELETE, "/test_delete"),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
+
+      Path dirPath = new Path(managedFilesetPath + "/test_delete");
+      Path localDirPath = new Path(localPath + "/test_delete");
+      localFileSystem.mkdirs(localDirPath);
+      assertTrue(localFileSystem.exists(localDirPath));
+      gravitinoFileSystem.delete(dirPath, true);
+      assertFalse(localFileSystem.exists(localDirPath));
 
       // mock the invalid fileset not in server
       String invalidFilesetName = "invalid_fileset";
@@ -412,32 +524,52 @@ public class TestGvfsBase extends GravitinoMockServerBase {
       Path localPrefixPath =
           FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, "test");
       assertThrows(RuntimeException.class, () -> gravitinoFileSystem.delete(localPrefixPath, true));
-
-      // test external fileset mounts the single file
-      FileSystemTestUtils.create(externalFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(externalFilesetPath));
-      gravitinoFileSystem.delete(externalFilesetPath, true);
-      assertFalse(gravitinoFileSystem.exists(externalFilesetPath));
-      assertFalse(localFileSystem.exists(localFilePath));
     }
   }
 
   @Test
   public void testGetStatus() throws IOException {
+    String filesetName = "testGetStatus";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
 
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(managedFilesetPath));
-      assertTrue(gravitinoFileSystem.getFileStatus(managedFilesetPath).isDirectory());
-      assertTrue(localFileSystem.exists(localDirPath));
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath.toString())
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.GET_FILE_STATUS, ""),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
 
       FileStatus gravitinoStatus = gravitinoFileSystem.getFileStatus(managedFilesetPath);
-      FileStatus localStatus = localFileSystem.getFileStatus(localDirPath);
-      gravitinoFileSystem.delete(managedFilesetPath, true);
+      FileStatus localStatus = localFileSystem.getFileStatus(localPath);
 
-      assertFalse(gravitinoFileSystem.exists(managedFilesetPath));
       assertEquals(
           localStatus.getPath().toString(),
           gravitinoStatus
@@ -451,21 +583,49 @@ public class TestGvfsBase extends GravitinoMockServerBase {
 
   @Test
   public void testListStatus() throws IOException {
+    String filesetName = "testListStatus";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
-
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
-
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(managedFilesetPath));
-      assertTrue(gravitinoFileSystem.getFileStatus(managedFilesetPath).isDirectory());
-      assertTrue(localFileSystem.exists(localDirPath));
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
 
       for (int i = 0; i < 5; i++) {
-        Path subPath = new Path(managedFilesetPath + "/sub" + i);
-        FileSystemTestUtils.mkdirs(subPath, gravitinoFileSystem);
-        assertTrue(gravitinoFileSystem.exists(subPath));
-        assertTrue(gravitinoFileSystem.getFileStatus(subPath).isDirectory());
+        Path subLocalPath = new Path(localPath + "/sub" + i);
+        FileSystemTestUtils.mkdirs(subLocalPath, localFileSystem);
+        assertTrue(localFileSystem.exists(subLocalPath));
+        assertTrue(localFileSystem.getFileStatus(subLocalPath).isDirectory());
+      }
+
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath.toString())
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.LIST_STATUS, ""),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
       }
 
       List<FileStatus> gravitinoStatuses =
@@ -474,7 +634,7 @@ public class TestGvfsBase extends GravitinoMockServerBase {
       assertEquals(5, gravitinoStatuses.size());
 
       List<FileStatus> localStatuses =
-          new ArrayList<>(Arrays.asList(localFileSystem.listStatus(localDirPath)));
+          new ArrayList<>(Arrays.asList(localFileSystem.listStatus(localPath)));
       localStatuses.sort(Comparator.comparing(FileStatus::getPath));
       assertEquals(5, localStatuses.size());
 
@@ -488,26 +648,76 @@ public class TestGvfsBase extends GravitinoMockServerBase {
                 .replaceFirst(
                     GravitinoVirtualFileSystemConfiguration.GVFS_FILESET_PREFIX,
                     FileSystemTestUtils.localRootPrefix()));
-        gravitinoFileSystem.delete(gravitinoStatuses.get(i).getPath(), true);
       }
     }
   }
 
   @Test
   public void testMkdirs() throws IOException {
+    String filesetName = "testMkdirs";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (FileSystem gravitinoFileSystem = managedFilesetPath.getFileSystem(conf);
-        FileSystem localFileSystem = localDirPath.getFileSystem(conf)) {
+        FileSystem localFileSystem = localPath.getFileSystem(conf)) {
+      FileSystemTestUtils.mkdirs(localPath, localFileSystem);
+      assertTrue(localFileSystem.exists(localPath));
+      assertTrue(localFileSystem.getFileStatus(localPath).isDirectory());
 
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/test_mkdirs")
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.MKDIRS, "/test_mkdirs"),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
 
-      FileSystemTestUtils.mkdirs(managedFilesetPath, gravitinoFileSystem);
-      assertTrue(gravitinoFileSystem.exists(managedFilesetPath));
-      assertTrue(gravitinoFileSystem.getFileStatus(managedFilesetPath).isDirectory());
+      Path subDirPath = new Path(managedFilesetPath + "/test_mkdirs");
+      Path localDirPath = new Path(localPath + "/test_mkdirs");
+      FileSystemTestUtils.mkdirs(subDirPath, gravitinoFileSystem);
+      assertTrue(localFileSystem.exists(localDirPath));
+      assertTrue(localFileSystem.getFileStatus(localDirPath).isDirectory());
 
-      FileStatus gravitinoStatus = gravitinoFileSystem.getFileStatus(managedFilesetPath);
       FileStatus localStatus = localFileSystem.getFileStatus(localDirPath);
-      gravitinoFileSystem.delete(managedFilesetPath, true);
-      assertFalse(gravitinoFileSystem.exists(managedFilesetPath));
+
+      FilesetContextDTO mockContextDTO1 =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath + "/test_mkdirs")
+              .build();
+      FilesetContextResponse contextResponse1 = new FilesetContextResponse(mockContextDTO1);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.GET_FILE_STATUS, "/test_mkdirs"),
+            contextResponse1,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
+      FileStatus gravitinoStatus = gravitinoFileSystem.getFileStatus(subDirPath);
 
       assertEquals(
           localStatus.getPath().toString(),
@@ -522,6 +732,9 @@ public class TestGvfsBase extends GravitinoMockServerBase {
 
   @Test
   public void testExtractIdentifier() throws IOException, URISyntaxException {
+    String filesetName = "testExtractIdentifier";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
     try (GravitinoVirtualFileSystem fs =
         (GravitinoVirtualFileSystem) managedFilesetPath.getFileSystem(conf)) {
       NameIdentifier identifier =
@@ -594,16 +807,80 @@ public class TestGvfsBase extends GravitinoMockServerBase {
 
   @Test
   public void testGetDefaultReplications() throws IOException {
+    String filesetName = "testGetDefaultReplications";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (GravitinoVirtualFileSystem fs =
         (GravitinoVirtualFileSystem) managedFilesetPath.getFileSystem(conf)) {
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath.toString())
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.GET_DEFAULT_REPLICATION, ""),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
       assertEquals(1, fs.getDefaultReplication(managedFilesetPath));
     }
   }
 
   @Test
   public void testGetDefaultBlockSize() throws IOException {
+    String filesetName = "testGetDefaultBlockSize";
+    Path managedFilesetPath =
+        FileSystemTestUtils.createFilesetPath(catalogName, schemaName, filesetName, true);
+    Path localPath = FileSystemTestUtils.createLocalDirPrefix(catalogName, schemaName, filesetName);
+    String contextPath =
+        String.format(
+            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s/context",
+            metalakeName, catalogName, schemaName, filesetName);
     try (GravitinoVirtualFileSystem fs =
         (GravitinoVirtualFileSystem) managedFilesetPath.getFileSystem(conf)) {
+      FilesetDTO managedFileset =
+          mockFilesetDTO(
+              metalakeName,
+              catalogName,
+              schemaName,
+              filesetName,
+              Fileset.Type.MANAGED,
+              localPath.toString());
+      FilesetContextDTO mockContextDTO =
+          FilesetContextDTO.builder()
+              .fileset(managedFileset)
+              .actualPath(localPath.toString())
+              .build();
+      FilesetContextResponse contextResponse = new FilesetContextResponse(mockContextDTO);
+      try {
+        buildMockResource(
+            Method.POST,
+            contextPath,
+            mockGetContextRequest(FilesetDataOperation.GET_DEFAULT_BLOCK_SIZE, ""),
+            contextResponse,
+            SC_OK);
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
       assertEquals(32 * 1024 * 1024, fs.getDefaultBlockSize(managedFilesetPath));
     }
   }
