@@ -20,6 +20,7 @@ package org.apache.gravitino.client;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -29,6 +30,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.Namespace;
+import org.apache.gravitino.context.CallerContext;
 import org.apache.gravitino.dto.AuditDTO;
 import org.apache.gravitino.dto.CatalogDTO;
 import org.apache.gravitino.dto.requests.FilesetCreateRequest;
@@ -36,6 +38,7 @@ import org.apache.gravitino.dto.requests.FilesetUpdateRequest;
 import org.apache.gravitino.dto.requests.FilesetUpdatesRequest;
 import org.apache.gravitino.dto.responses.DropResponse;
 import org.apache.gravitino.dto.responses.EntityListResponse;
+import org.apache.gravitino.dto.responses.FileLocationResponse;
 import org.apache.gravitino.dto.responses.FilesetResponse;
 import org.apache.gravitino.exceptions.FilesetAlreadyExistsException;
 import org.apache.gravitino.exceptions.NoSuchFilesetException;
@@ -224,6 +227,36 @@ class FilesetCatalog extends BaseSchemaCatalog implements org.apache.gravitino.f
     resp.validate();
 
     return resp.dropped();
+  }
+
+  /**
+   * Get the actual path of a file or directory based on the storage location of Fileset and the sub
+   * path.
+   *
+   * @param ident A fileset identifier.
+   * @param subPath The sub path to the file or directory.
+   * @return The actual location of the file or directory.
+   * @throws NoSuchFilesetException If the fileset does not exist.
+   */
+  @Override
+  public String getFileLocation(NameIdentifier ident, String subPath)
+      throws NoSuchFilesetException {
+    checkFilesetNameIdentifier(ident);
+    Namespace fullNamespace = getFilesetFullNamespace(ident.namespace());
+
+    CallerContext callerContext = CallerContext.CallerContextHolder.get();
+    Map<String, String> queryParams = Maps.newHashMap();
+    queryParams.put("subPath", subPath);
+    FileLocationResponse resp =
+        restClient.get(
+            formatFilesetRequestPath(fullNamespace) + "/" + ident.name() + "/" + "fileLocation",
+            queryParams,
+            FileLocationResponse.class,
+            callerContext != null ? callerContext.context() : Collections.emptyMap(),
+            ErrorHandlers.filesetErrorHandler());
+    resp.validate();
+
+    return resp.getFileLocation();
   }
 
   @VisibleForTesting

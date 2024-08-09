@@ -18,11 +18,13 @@
  */
 package org.apache.gravitino.connector;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.gravitino.Catalog;
 import org.apache.gravitino.NameIdentifier;
 import org.apache.gravitino.Namespace;
@@ -428,6 +430,27 @@ public class TestCatalogOperations
     } else {
       return false;
     }
+  }
+
+  @Override
+  public String getFileLocation(NameIdentifier ident, String subPath) {
+    Preconditions.checkArgument(subPath != null, "subPath must not be null");
+
+    Fileset fileset = loadFileset(ident);
+
+    String storageLocation = fileset.storageLocation();
+    String fileLocation;
+    // subPath cannot be null, so we only need check if it is blank
+    if (StringUtils.isBlank(subPath)) {
+      fileLocation = storageLocation;
+    } else {
+      fileLocation =
+          subPath.startsWith("/")
+              ? String.format("%s%s", storageLocation, subPath)
+              : String.format("%s/%s", storageLocation, subPath);
+    }
+
+    return fileLocation;
   }
 
   @Override
