@@ -29,6 +29,9 @@ from gravitino import (
     Fileset,
     FilesetChange,
 )
+from gravitino.api.base_fileset_data_operation_ctx import BaseFilesetDataOperationCtx
+from gravitino.api.client_type import ClientType
+from gravitino.api.fileset_data_operation import FilesetDataOperation
 from gravitino.exceptions.base import NoSuchFilesetException
 from tests.integration.integration_test_env import IntegrationTestEnv
 
@@ -208,3 +211,31 @@ class TestFilesetCatalog(IntegrationTestEnv):
         )
         self.assertEqual(fileset_comment_removed.name(), self.fileset_name)
         self.assertIsNone(fileset_comment_removed.comment())
+
+    def test_get_fileset_context(self):
+        self.create_fileset()
+        fileset = (
+            self.gravitino_client.load_catalog(name=self.catalog_name)
+            .as_fileset_catalog()
+            .load_fileset(ident=self.fileset_ident)
+        )
+        self.assertIsNotNone(fileset)
+        self.assertEqual(fileset.name(), self.fileset_name)
+        self.assertEqual(fileset.comment(), self.fileset_comment)
+        self.assertEqual(fileset.audit_info().creator(), "anonymous")
+
+        ctx = BaseFilesetDataOperationCtx(
+            sub_path="/test",
+            operation=FilesetDataOperation.MKDIRS,
+            client_type=ClientType.PYTHON_GVFS,
+        )
+        context = (
+            self.gravitino_client.load_catalog(name=self.catalog_name)
+            .as_fileset_catalog()
+            .get_fileset_context(ident=self.fileset_ident, ctx=ctx)
+        )
+        self.assertIsNotNone(context)
+        self.assertEqual(context.fileset().name(), self.fileset_name)
+        self.assertEqual(context.fileset().comment(), self.fileset_comment)
+        self.assertEqual(context.fileset().audit_info().creator(), "anonymous")
+        self.assertEqual(context.actual_path(), f"file:{self.fileset_location}/test")

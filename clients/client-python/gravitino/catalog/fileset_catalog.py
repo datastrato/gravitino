@@ -23,13 +23,17 @@ from typing import List, Dict
 from gravitino.api.catalog import Catalog
 from gravitino.api.fileset import Fileset
 from gravitino.api.fileset_change import FilesetChange
+from gravitino.api.fileset_context import FilesetContext
+from gravitino.api.fileset_data_operation_ctx import FilesetDataOperationCtx
 from gravitino.catalog.base_schema_catalog import BaseSchemaCatalog
 from gravitino.dto.audit_dto import AuditDTO
 from gravitino.dto.requests.fileset_create_request import FilesetCreateRequest
 from gravitino.dto.requests.fileset_update_request import FilesetUpdateRequest
 from gravitino.dto.requests.fileset_updates_request import FilesetUpdatesRequest
+from gravitino.dto.requests.get_fileset_context_request import GetFilesetContextRequest
 from gravitino.dto.responses.drop_response import DropResponse
 from gravitino.dto.responses.entity_list_response import EntityListResponse
+from gravitino.dto.responses.fileset_context_response import FilesetContextResponse
 from gravitino.dto.responses.fileset_response import FilesetResponse
 from gravitino.name_identifier import NameIdentifier
 from gravitino.namespace import Namespace
@@ -239,6 +243,36 @@ class FilesetCatalog(BaseSchemaCatalog):
         except Exception as e:
             logger.warning("Failed to drop fileset %s: %s", ident, e)
             return False
+
+    def get_fileset_context(
+        self, ident: NameIdentifier, ctx: FilesetDataOperationCtx
+    ) -> FilesetContext:
+        """Get a fileset context from the catalog.
+
+        Args:
+             ident: A fileset identifier.
+             ctx: The data operation context.
+
+        Returns:
+             the fileset context.
+        """
+        self.check_fileset_name_identifier(ident)
+        req = GetFilesetContextRequest(
+            ctx.sub_path(), ctx.operation(), ctx.client_type()
+        )
+        req.validate()
+
+        full_namespace = self._get_fileset_full_namespace(ident.namespace())
+
+        resp = self.rest_client.post(
+            f"{self.format_fileset_request_path(full_namespace)}/{ident.name()}/context",
+            req,
+            error_handler=FILESET_ERROR_HANDLER,
+        )
+        context_resp = FilesetContextResponse.from_json(resp.body, infer_missing=True)
+        context_resp.validate()
+
+        return context_resp.context()
 
     @staticmethod
     def check_fileset_namespace(namespace: Namespace):

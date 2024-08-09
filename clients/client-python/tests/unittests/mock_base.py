@@ -18,13 +18,15 @@ under the License.
 """
 
 import json
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 from gravitino import GravitinoMetalake, Catalog, Fileset
 from gravitino.catalog.fileset_catalog import FilesetCatalog
+from gravitino.dto.fileset_context_dto import FilesetContextDTO
 from gravitino.dto.fileset_dto import FilesetDTO
 from gravitino.dto.audit_dto import AuditDTO
 from gravitino.dto.metalake_dto import MetalakeDTO
+from gravitino.dto.responses.fileset_context_response import FilesetContextResponse
 from gravitino.namespace import Namespace
 from gravitino.utils.http_client import HTTPClient
 
@@ -84,6 +86,29 @@ def mock_load_fileset(name: str, location: str):
         _audit=audit_dto,
     )
     return fileset
+
+
+def mock_get_fileset_context_response(name: str, location: str, actual_path: str):
+    audit_dto = AuditDTO(
+        _creator="test",
+        _create_time="2022-01-01T00:00:00Z",
+        _last_modifier="test",
+        _last_modified_time="2024-04-05T10:10:35.218Z",
+    )
+    fileset = FilesetDTO(
+        _name=name,
+        _type=Fileset.Type.MANAGED,
+        _comment="this is test",
+        _properties={"k": "v"},
+        _storage_location=location,
+        _audit=audit_dto,
+    )
+    context = FilesetContextDTO(_fileset=fileset, _actual_path=actual_path)
+    context_resp = FilesetContextResponse(_code=200, _context=context)
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.body = context_resp.to_json().encode("utf-8")
+    return mock_response
 
 
 def mock_data(cls):

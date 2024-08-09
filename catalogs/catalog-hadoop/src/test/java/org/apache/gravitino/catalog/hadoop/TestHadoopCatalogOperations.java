@@ -66,8 +66,12 @@ import org.apache.gravitino.exceptions.NoSuchFilesetException;
 import org.apache.gravitino.exceptions.NoSuchSchemaException;
 import org.apache.gravitino.exceptions.NonEmptySchemaException;
 import org.apache.gravitino.exceptions.SchemaAlreadyExistsException;
+import org.apache.gravitino.file.BaseFilesetDataOperationCtx;
+import org.apache.gravitino.file.ClientType;
 import org.apache.gravitino.file.Fileset;
 import org.apache.gravitino.file.FilesetChange;
+import org.apache.gravitino.file.FilesetContext;
+import org.apache.gravitino.file.FilesetDataOperation;
 import org.apache.gravitino.storage.IdGenerator;
 import org.apache.gravitino.storage.RandomIdGenerator;
 import org.apache.gravitino.storage.relational.service.CatalogMetaService;
@@ -760,6 +764,128 @@ public class TestHadoopCatalogOperations {
                 "hadoop",
                 "comment",
                 ImmutableMap.of()));
+  }
+
+  @Test
+  public void testGetFilesetContext() throws IOException {
+    String schemaName = "schema1024";
+    String comment = "comment1024";
+    String schemaPath = TEST_ROOT_PATH + "/" + schemaName;
+    createSchema(schemaName, comment, null, schemaPath);
+
+    String catalogName = "c1";
+    String filesetName1 = "test_get_fileset_context_1";
+    String filesetLocation1 =
+        TEST_ROOT_PATH + "/" + catalogName + "/" + schemaName + "/" + filesetName1;
+    Fileset fileset1 =
+        createFileset(
+            filesetName1, schemaName, comment, Fileset.Type.MANAGED, null, filesetLocation1);
+
+    try (SecureHadoopCatalogOperations ops = new SecureHadoopCatalogOperations(store)) {
+      ops.initialize(Maps.newHashMap(), randomCatalogInfo(), HADOOP_PROPERTIES_METADATA);
+      NameIdentifier filesetIdent = NameIdentifier.of("m1", "c1", schemaName, filesetName1);
+      // test sub path start with "/"
+      BaseFilesetDataOperationCtx dataOperationCtx1 =
+          BaseFilesetDataOperationCtx.builder()
+              .withSubPath("/test/test.parquet")
+              .withOperation(FilesetDataOperation.OPEN)
+              .withClientType(ClientType.HADOOP_GVFS)
+              .build();
+      FilesetContext context1 = ops.getFilesetContext(filesetIdent, dataOperationCtx1);
+      Assertions.assertEquals(filesetName1, context1.fileset().name());
+      Assertions.assertEquals(Fileset.Type.MANAGED, context1.fileset().type());
+      Assertions.assertEquals("comment1024", context1.fileset().comment());
+      Assertions.assertEquals(fileset1.storageLocation(), context1.fileset().storageLocation());
+      Assertions.assertEquals(
+          String.format("%s%s", context1.fileset().storageLocation(), dataOperationCtx1.subPath()),
+          context1.actualPath());
+      Assertions.assertFalse(context1.fileset().properties().containsKey(StringIdentifier.ID_KEY));
+
+      // test sub path start without "/"
+      BaseFilesetDataOperationCtx dataOperationCtx2 =
+          BaseFilesetDataOperationCtx.builder()
+              .withSubPath("test/test.parquet")
+              .withOperation(FilesetDataOperation.OPEN)
+              .withClientType(ClientType.HADOOP_GVFS)
+              .build();
+      FilesetContext context2 = ops.getFilesetContext(filesetIdent, dataOperationCtx2);
+      Assertions.assertEquals(filesetName1, context2.fileset().name());
+      Assertions.assertEquals(Fileset.Type.MANAGED, context2.fileset().type());
+      Assertions.assertEquals("comment1024", context2.fileset().comment());
+      Assertions.assertEquals(fileset1.storageLocation(), context2.fileset().storageLocation());
+      Assertions.assertFalse(context2.fileset().properties().containsKey(StringIdentifier.ID_KEY));
+      Assertions.assertEquals(
+          String.format("%s/%s", context2.fileset().storageLocation(), dataOperationCtx2.subPath()),
+          context2.actualPath());
+    }
+
+    // test sub path is null
+    Assertions.assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            BaseFilesetDataOperationCtx.builder()
+                .withSubPath(null)
+                .withOperation(FilesetDataOperation.RENAME)
+                .withClientType(ClientType.HADOOP_GVFS)
+                .build());
+
+    // test mount a single file
+    String filesetName2 = "test_get_fileset_context_2";
+    String filesetLocation2 =
+        TEST_ROOT_PATH + "/" + catalogName + "/" + schemaName + "/" + filesetName2;
+    Path filesetLocationPath2 = new Path(filesetLocation2);
+    createFileset(filesetName2, schemaName, comment, Fileset.Type.MANAGED, null, filesetLocation2);
+    try (HadoopCatalogOperations ops = new HadoopCatalogOperations(store);
+        FileSystem localFileSystem = filesetLocationPath2.getFileSystem(new Configuration())) {
+      ops.initialize(Maps.newHashMap(), randomCatalogInfo(), HADOOP_PROPERTIES_METADATA);
+      NameIdentifier filesetIdent = NameIdentifier.of("m1", "c1", schemaName, filesetName2);
+      // replace fileset location to a single file
+      Assertions.assertTrue(localFileSystem.exists(filesetLocationPath2));
+      Assertions.assertTrue(localFileSystem.getFileStatus(filesetLocationPath2).isDirectory());
+      localFileSystem.delete(filesetLocationPath2, true);
+      localFileSystem.create(filesetLocationPath2);
+      Assertions.assertTrue(localFileSystem.exists(filesetLocationPath2));
+      Assertions.assertTrue(localFileSystem.getFileStatus(filesetLocationPath2).isFile());
+
+      BaseFilesetDataOperationCtx dataOperationCtx1 =
+          BaseFilesetDataOperationCtx.builder()
+              .withSubPath("/year=2024/month=07/day=22/test.parquet")
+              .withOperation(FilesetDataOperation.RENAME)
+              .withClientType(ClientType.HADOOP_GVFS)
+              .build();
+      Assertions.assertThrows(
+          IllegalArgumentException.class,
+          () -> ops.getFilesetContext(filesetIdent, dataOperationCtx1));
+    }
+
+    String filesetName3 = "test_get_fileset_context_3";
+    String filesetLocation3 =
+        TEST_ROOT_PATH + "/" + catalogName + "/" + schemaName + "/" + filesetName3;
+    Path filesetLocationPath3 = new Path(filesetLocation3);
+    createFileset(filesetName3, schemaName, comment, Fileset.Type.MANAGED, null, filesetLocation3);
+    try (HadoopCatalogOperations ops = new HadoopCatalogOperations(store);
+        FileSystem localFileSystem = filesetLocationPath3.getFileSystem(new Configuration())) {
+      ops.initialize(Maps.newHashMap(), randomCatalogInfo(), HADOOP_PROPERTIES_METADATA);
+      NameIdentifier filesetIdent = NameIdentifier.of("m1", "c1", schemaName, filesetName3);
+      // replace fileset location to a single file
+      Assertions.assertTrue(localFileSystem.exists(filesetLocationPath3));
+      Assertions.assertTrue(localFileSystem.getFileStatus(filesetLocationPath3).isDirectory());
+      localFileSystem.delete(filesetLocationPath3, true);
+      localFileSystem.create(filesetLocationPath3);
+      Assertions.assertTrue(localFileSystem.exists(filesetLocationPath3));
+      Assertions.assertTrue(localFileSystem.getFileStatus(filesetLocationPath3).isFile());
+
+      // test rename with an empty subPath
+      BaseFilesetDataOperationCtx dataOperationCtx1 =
+          BaseFilesetDataOperationCtx.builder()
+              .withSubPath("")
+              .withOperation(FilesetDataOperation.RENAME)
+              .withClientType(ClientType.HADOOP_GVFS)
+              .build();
+      Assertions.assertThrows(
+          IllegalArgumentException.class,
+          () -> ops.getFilesetContext(filesetIdent, dataOperationCtx1));
+    }
   }
 
   private static Stream<Arguments> locationArguments() {

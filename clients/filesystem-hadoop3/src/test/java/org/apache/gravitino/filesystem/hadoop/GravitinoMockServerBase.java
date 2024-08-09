@@ -32,14 +32,17 @@ import org.apache.gravitino.dto.AuditDTO;
 import org.apache.gravitino.dto.CatalogDTO;
 import org.apache.gravitino.dto.MetalakeDTO;
 import org.apache.gravitino.dto.file.FilesetDTO;
+import org.apache.gravitino.dto.requests.GetFilesetContextRequest;
 import org.apache.gravitino.dto.responses.CatalogResponse;
-import org.apache.gravitino.dto.responses.FilesetResponse;
 import org.apache.gravitino.dto.responses.MetalakeResponse;
 import org.apache.gravitino.dto.responses.VersionResponse;
+import org.apache.gravitino.file.ClientType;
 import org.apache.gravitino.file.Fileset;
+import org.apache.gravitino.file.FilesetDataOperation;
 import org.apache.gravitino.json.JsonUtils;
 import org.apache.gravitino.shaded.com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.gravitino.shaded.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.gravitino.shaded.com.google.common.collect.Maps;
 import org.apache.hc.core5.http.HttpStatus;
 import org.apache.hc.core5.http.Method;
 import org.junit.jupiter.api.AfterAll;
@@ -59,8 +62,6 @@ public abstract class GravitinoMockServerBase {
   protected static final String metalakeName = "metalake_1";
   protected static final String catalogName = "fileset_catalog_1";
   protected static final String schemaName = "schema_1";
-  protected static final String managedFilesetName = "managed_fileset";
-  protected static final String externalFilesetName = "external_fileset";
   protected static final String provider = "test";
 
   @BeforeAll
@@ -174,7 +175,7 @@ public abstract class GravitinoMockServerBase {
     }
   }
 
-  protected static void mockFilesetDTO(
+  protected static FilesetDTO mockFilesetDTO(
       String metalakeName,
       String catalogName,
       String schemaName,
@@ -182,25 +183,23 @@ public abstract class GravitinoMockServerBase {
       Fileset.Type type,
       String location) {
     NameIdentifier fileset = NameIdentifier.of(metalakeName, catalogName, schemaName, filesetName);
-    String filesetPath =
-        String.format(
-            "/api/metalakes/%s/catalogs/%s/schemas/%s/filesets/%s",
-            metalakeName, catalogName, schemaName, filesetName);
-    FilesetDTO mockFileset =
-        FilesetDTO.builder()
-            .name(fileset.name())
-            .type(type)
-            .storageLocation(location)
-            .comment("comment")
-            .properties(ImmutableMap.of("k1", "v1"))
-            .audit(AuditDTO.builder().withCreator("creator").withCreateTime(Instant.now()).build())
-            .build();
-    FilesetResponse filesetResponse = new FilesetResponse(mockFileset);
-    try {
-      buildMockResource(Method.GET, filesetPath, null, filesetResponse, SC_OK);
-    } catch (JsonProcessingException e) {
-      throw new RuntimeException(e);
-    }
+    return FilesetDTO.builder()
+        .name(fileset.name())
+        .type(type)
+        .storageLocation(location)
+        .comment("comment")
+        .properties(Maps.newHashMap())
+        .audit(AuditDTO.builder().withCreator("creator").withCreateTime(Instant.now()).build())
+        .build();
+  }
+
+  protected static GetFilesetContextRequest mockGetContextRequest(
+      FilesetDataOperation operation, String subPath) {
+    return GetFilesetContextRequest.builder()
+        .operation(operation)
+        .subPath(subPath)
+        .clientType(ClientType.HADOOP_GVFS)
+        .build();
   }
 
   public static ClientAndServer mockServer() {
